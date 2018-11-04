@@ -1,0 +1,361 @@
+#include "rm.h"
+#define markItDirty(x) (this->bufPageManager->markDirty((x)))
+#define recordPtr(x) (PageReader::getRPtr(b, x, this->fileHeader.recordStart, this->fileHeader.recordSize))
+RecordManager::RecordManager() {
+	MyBitMap::initConst();
+	this.fileManager = new FileManager(); 
+	this.bufPageManager = new BufPageManager(this.fileManager);
+}
+RecordManager::~RecordManager() {
+	this.bufPageManager.close();
+	delete this.bufPageManager;
+	delete this.fileManager;
+}
+bool RecordManager::createFile(const char* filename, int recordSize) {
+	/* create a file, then init settings in first page*/
+	bool created = this.fileManager.createFile(filename);
+	if (!created) {
+		printf("RecordManager::createFile failed to createFile!");
+		return false;
+	}
+	int fileID;
+	if (!this.fileManager.openFile(filename, fileID)) {
+		printf("RecordManager::createFile failed to openFile!");
+		return false;
+	}
+	int index;
+	BufType firstPage = this.bufPageManager.allocPage(fileID, 0, index, false);
+	this.initFH(firstPage, recordSize);
+	this.bufPageManager.markDirty(index);
+	return true;
+}
+bool RecordManager::destroyFile(const char* filename) {
+	return false;
+}
+RecordHandle& RecordManager::openFile(const char* filename) {
+	int fileID;
+	bool opened = this.fileManager.openFile(name, fileID);
+	if (!opened) {
+		printf("RecordManager::openFile failed to openFile!");
+		return false;
+	}
+	int index;
+	BufType firstPage = getPage(fileID, 0, index);
+	RecordHandle recordHandle = new RecordHandle();
+	if (!recordHandle.init(firstPage, fileID)) {
+		printf("RecordManager::openFile failed to init!");
+		return recordHandle;
+	}
+	recordHandle.setManager(this);
+	recordHandle.setIndex(index);
+	return recordHandle;
+}
+bool RecordManager::closeFile(RecordHandle& recordHandle) {
+	this.bufPageManager.close();
+	if (this.fileManager.closeFile(recordHandle.getFileID()) != 0) {
+		return false;
+	}
+	return true;
+}
+
+void initFH(BufType fp, int rs) {
+	struct FileHeader* fh = (FileHeader*)fp;
+	int recordNum, bitmapSize, addition = sizeof(int) * 3;
+	recordNum = 8 * (PAGESIZE - addition - 1) / (8 * rs + 1);
+	bitmapSize = (recordNum % 8 == 0) ? recordNum / 8 : (recordNum / 8) + 1;
+	fh->recordSize = rs;
+	fh->recordNum = recordNum;
+	fh->pageNum = 1;
+	fh->next = 1;
+	fh->bitmapStart = addition;
+	fh->bitmapSize = bitmapSize;
+	fh->recordStart = addition + bitmapSize;
+}
+
+/* ======================================================================== */
+char* getRecordPosition(BufType b, int recordStart, int slot, int recordSize) {
+	char* ret = ((char*)b + recordStart + slot * recordSize);
+	return ret;
+}
+int RecordHandle::getRec(const RID &rid, Record& record) const {
+	FileManager* fileManager = this->fileManager;
+	BufPageManager* bufPageManager = this->bufPageManager;
+	FileHeader& fileHeader = this.fileHeader;
+	int recordSize = fileHeader.recordSize;
+	int page = rid.getPage(), slot = rid.getSlot(), index;
+	BufType b = bufPageManager->getPage(this->fileID, page, index);
+	if (!PageReader::getBitmap(b, fileHeader.bitmapStart, slot)) {
+		return -1;
+	}
+	bufPageManager->access(index);
+	char* data = new char[recordSize];
+	const char* recordPosition = getRecordPosition(b, this.fileHeader.recordStart, slot, recordSize);
+	strncpy(data, recordPosition, recordSize);
+	record.set(rid, data, recordSize);
+	return 0;	
+}
+RID &RecordHandle::insertRec(const char *data) {
+	// find the free position, then insert in it
+	// todo: check the page exist!
+	int free = this->fileHeader.next, index, maxPage = this->fileHeader.pageNum, recordNum = this->fileHeader.recordNum;
+	assert(free <= maxPage);
+	BufPageManager* bufPageManager = this->bufPageManager;
+	if (free == maxPage) {
+		// new page
+		BufType b = bufPageManager.allocPage(this->fileID, free, index);
+		PageReader::initPage(b, free);
+		this->fileHeader.pageNum++;
+		PageReader::setCount(1, b);
+		PageReader::writeRecord(b, this->fileHeader.recordStart, this->fileHeader.recordSize, 0, data);
+		PageReader::setBitmap(b, 0, true);
+		bufPageManager->markDirty(index);
+		RID ret(free, 0);
+		return ret;
+	}
+	/* so page[free] exist! */
+	BufType b = bufPageManager->getPage(this->fileID, free, index);
+	int count = PageReader::getCount(b);
+	assert(count < recordNum);
+	int slot = PageReader::getFreeSlot(b, this->fileHeader.bitmapStart, this->fileHeader.bitmapSize);
+	PageReader::writeRecord(b, this->fileHeader.recordStart, this->fileHeader.recordNum, slot, data);
+	PageReader::setBitmap(b, slot, true);
+	PageReader::setCount(++count, b);
+	bufPageManager->markDirty(index);
+	if (count == recordNum) {
+		// update free linklist
+		int next = PageReader::getNext(b), nindex;
+		// check if next page exist
+		assert(next <= maxPage);
+		this->fileHeader.next = next;
+		if (next != maxPage) {
+			BufType nextFreePage = bufPageManager.getPage(this->fileID, next, nindex);
+			PageReader::setPrev(0, nextFreePage);
+		}
+	}
+}
+bool RecordHandle::deleteRec(const RID &rid) {
+	FileHeader& fileHeader = this->fileHeader;
+	int page = rid.getPage(), slot = rid.getSlot(), index;
+	assert((page < fileHeader.pageNum) && (slot < fileHeader.recordNum));
+	// find the page 
+	BufType b = this->bufPageManager->getPage(this->fileID, page, index), temp;
+	// check if bitmap[slot] is true 
+	if (PageReader::getBitmap(b, fileHeader.bitmapStart, slot) == true) {
+		// revise bitmap and count mark it dirty
+		PageReader::setBitmap(b, slot, false);
+		markItDirty(index);
+		int count = PageReader::getCount(b);
+		PageReader::setCount(b, count - 1);
+		//check link
+		if (count == fileHeader.recordNum) {
+			// add to linklist
+			int prevPage = fileHeader.next, pindex, next;
+			assert(prevPage != page);
+			if (prevPage > page) {
+				// free sequence is [head, page, prevPage]
+				fileHeader.next = page;
+				PageReader::setPrev(b, 0);
+				assert(prevPage <= fileHeader.pageNum);
+				if (prevPage != fileHeader.pageNum) {
+					// prevPage exist
+					temp = this->bufPageManager->getPage(this->fileID, prevPage, pindex);
+					PageReader::setNext(b, prevPage);
+					PageReader::setPrev(temp, page);
+					markItDirty(pindex);
+				}
+				return true;
+			}
+			while (1) {
+				temp = this->bufPageManager->getPage(this->fileID, prevPage, pindex);
+				next = PageReader::getNext(temp);
+				assert(next <= fileHeader.pageNum);
+				if (next > page) break;
+				prevPage = next;
+			}
+			//free page sequence is [prevPage, page, next]
+			PageReader::setNext(temp, page);
+			markItDirty(pindex);
+			PageReader::setPrev(b, prevPage);
+			if (next != fileHeader.pageNum) {
+				// next page exist
+				temp = this->bufPageManager->getPage(this->fileID, prevPage, pindex);
+				PageReader::setNext(b, next);
+				PageReader::setPrev(temp, page);
+				markItDirty(pindex);
+			}
+			return true;
+		}
+	} else {
+		printf("deleteRec::delete a record not exist:[%d,%d]", page, slot);
+		return false;
+	}
+
+}
+bool RecordHandle::updateRec(const Record &rec) {
+	FileHeader& fileHeader = this->fileHeader;
+	//check exist
+	RID& rid = rec.getRID();
+	int page = rid.getPage(), slot = rid.getSlot(), index;
+	if (page >= fileHeader.pageNum) {
+		printf("updateRec::page overflow [%d, %d]\n", page, fileHeader.pageNum);
+		return false;
+	}
+	BufType& b = this->getPageContent(page, index);
+	bool valid = PageReader::getBitmap(b, fileHeader.bitmapStart, slot);
+	if (!valid) {
+		printf("updateRec::not valid [%d, %d]\n", page, slot);
+		return false;
+	}
+	//update data
+	PageReader::writeRecord(b, fileHeader.recordStart, fileHeader.recordSize, slot, rec.getData());
+	markItDirty(index);
+	return true;
+}
+bool RecordHandle::init(const BufType firstPage, int fileID) {
+
+	this.valid = true;
+	this.fileID = fileID;
+}
+RecordHandle::RecordHandle() {
+	this.recordSize = -1;
+	this.maxRecordNum = -1;
+	this.pageCount = -1;
+	this.nextFreePage = -1;
+	this.fileID = -1;
+	this.valid = false;
+}
+bool RecordHandle::isValid() {
+	return this.valid;
+}
+int RecordHandle::getFileID() {
+	return this.fileID;
+}
+
+/* ======================================================= */
+bool equal(void* value1, void* value2, AttrType attrType, int attrLength) {
+	switch (attrtype) {
+	    case FLOAT: return (*(float*)value1 == *(float*)value2);
+	    case INT: return (*(int*)value1 == *(int*)value2) ;
+	    default: return (strncmp((char*) value1, (char*) value2, attrLength) == 0); 
+  	}
+}
+bool less_than(void* value1, void* value2, AttrType attrtype, int attrLength) {
+  	switch (attrtype) {
+    	case FLOAT: return (*(float*)value1 < *(float*)value2);
+    	case INT: return (*(int*)value1 < *(int*)value2);
+    	default: return (strncmp((char*) value1, (char*) value2, attrLength) < 0);
+  }
+}
+
+bool greater_than(void * value1, void * value2, AttrType attrtype, int attrLength){
+ 	switch (attrtype) {
+   		case FLOAT: return (*(float *)value1 > *(float*)value2);
+    	case INT: return (*(int *)value1 > *(int *)value2) ;
+    	default: return (strncmp((char *) value1, (char *) value2, attrLength) > 0);
+  }
+}
+
+bool less_than_or_eq_to(void * value1, void * value2, AttrType attrtype, int attrLength){
+  	switch(attrtype){
+    	case FLOAT: return (*(float *)value1 <= *(float*)value2);
+    	case INT: return (*(int *)value1 <= *(int *)value2) ;
+    	default: return (strncmp((char *) value1, (char *) value2, attrLength) <= 0);
+  }
+}
+
+bool greater_than_or_eq_to(void * value1, void * value2, AttrType attrtype, int attrLength){
+  	switch(attrtype){
+    	case FLOAT: return (*(float *)value1 >= *(float*)value2);
+    	case INT: return (*(int *)value1 >= *(int *)value2) ;
+    	default: return (strncmp((char *) value1, (char *) value2, attrLength) >= 0);
+  }
+}
+
+bool not_equal(void * value1, void * value2, AttrType attrtype, int attrLength){
+  	switch(attrtype){
+    	case FLOAT: return (*(float *)value1 != *(float*)value2);
+    	case INT: return (*(int *)value1 != *(int *)value2) ;
+    	default: return (strncmp((char *) value1, (char *) value2, attrLength) != 0);
+  }
+}
+RecordScan& RecordScan::openScan(const RecordHandle &recordHandle, AttrType attrType, int attrLength, int attrOffset, CompOp compOp, void *value) {
+	this->isValid = true;
+	this->recordHandle = recordHandle;
+	this->attrType = attrType;
+	this->attrLength = attrLength;
+	this->attrOffset = attrOffset;
+	this->compOp = compOp;
+	this->value = new char[attrLength];
+	this->scanSlot = -1;
+	this->scanPage = -1;
+	this->pageNum = recordHandle.getPageNum();
+	this->slotNum = recordHandle.getSlotNum();
+	this->recordNum = recordHandle.getRecordNum();
+	this->recordSize = recordHandle.getRercordSize();
+	memcpy(this->value, value, attrLength);
+	if (attrType == INT || attrType == FLOAT) {
+		assert(attrLength == 4);
+	}
+	switch (compOp) {
+	    case EQ_OP : comparator = &equal; break;
+	    case LT_OP : comparator = &less_than; break;
+	    case GT_OP : comparator = &greater_than; break;
+	    case LE_OP : comparator = &less_than_or_eq_to; break;
+	    case GE_OP : comparator = &greater_than_or_eq_to; break;
+	    case NE_OP : comparator = &not_equal; break;
+	    case NO_OP : comparator = NULL; break;
+	    default: printf("invalid compOp\n"); this->isValid = false;
+  	}
+  	return *this;
+}
+int RecordScan::getNextRec(Record& record) {
+	if (!this->isValid)
+		return -1;
+	if (this->pageNum <= 1) {
+		return -1;
+	}
+	if (this->scanPage < 0) {
+		this->scanPage = 1;
+		this->scanSlot = 0;
+	}
+	while (1) {
+		if (this->scanPage >= this->pageNum) {
+			return -1;
+		}
+		int index;
+		BufType b = this->getPageContent(this->scanPage, index);
+		int nextUsedSlot = PageReader::getUsedSlot(b, this->scanSlot, this->fileHeader.bitmapStart, this->fileHeader.bitmapSize);
+		this->scanSlot = nextUsedSlot;
+		assert(nextUsedSlot < this->slotNum);
+		if (nextUsedSlot < 0) {
+			// this page has no valid record
+			this->scanPage++;
+			this->scanSlot = 0;
+		} else {
+			// check record valid , set slot
+			char* rdata = (recordPtr(nextUsedSlot));
+			void* v1 = (void*)(rdata + this->attrOffset);
+			bool valid = this->comparator(v1, this->value, this->attrType, this->attrLength);
+			if (valid) {
+				//find next record return.
+				RID rid(this->scanPage, nextUsedSlot);
+				record.set(rid, rdata, this->recordSize);
+				moveAhead();
+				return 0;
+			} else {
+				moveAhead();
+			}
+		}
+	}
+}
+bool RecordScan::closeScan() {
+	return true;
+}
+void RecordScan::moveAhead() {
+	if (this->scanSlot >= this->recordNum) {
+		this->scanPage++;
+		this->scanSlot = 0;
+		return;
+	}
+	this->scanSlot++;
+}
