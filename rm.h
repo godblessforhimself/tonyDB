@@ -1,26 +1,34 @@
-#include "../filesystem/bufmanager/BufPageManager.h"
-#include "../filesystem/fileio/FileManager.h"
-#include "../filesystem/utils/pagedef.h"
+#ifndef RM_H
+#define RM_H
+#include "const.h"
+#include "filesystem/bufmanager/BufPageManager.h"
+#include "filesystem/fileio/FileManager.h"
 #define PAGESIZE (8000)
+class RecordHandle;
+class RecordScan;
 class RID {
 public:
 	RID(int p, int s) {
-		this.pageIndex = p;
-		this.slotIndex = s;
+		this->pageIndex = p;
+		this->slotIndex = s;
 	}
 	RID() {
-		this.pageIndex = -1;
-		this.slotIndex = -1;
+		this->pageIndex = -1;
+		this->slotIndex = -1;
 	}
-	int getPage() {
-		return this.pageIndex;
+	int getPage() const{
+		return this->pageIndex;
 	}
-	int getSlot() {
-		return this.slotIndex;
+	int getSlot() const {
+		return this->slotIndex;
 	}
 	void copy(RID rid) {
-		this.pageIndex = rid.pageIndex;
-		this.slotIndex = rid.slotIndex;
+		this->pageIndex = rid.pageIndex;
+		this->slotIndex = rid.slotIndex;
+	}
+	void set(int p, int s) {
+		this->pageIndex = p;
+		this->slotIndex = s;
 	}
 private:
 	int pageIndex;
@@ -35,14 +43,13 @@ struct FileHeader {
 	int bitmapSize;		// the size of bitmap
 	int recordStart;	// the offset of record
 };
-void initFH(BufType fp, int rs);
 /*
 content page
 int prev,next,count;
 char[] bitmap;
 char[] records;
 */
-static class PageReader {
+class PageReader {
 public:
 	static int getPrev(BufType page) {
 		return page[0];
@@ -64,7 +71,7 @@ public:
 	}
 	/* init page */
 	static void initPage(BufType page, int index) {
-		memset((void*)page, 0, PAGESIZE)；
+		memset((void*)page, 0, PAGESIZE);
 		setPrev(page, 0);
 		setNext(page, index + 1);
 		setCount(page, 0);
@@ -73,12 +80,12 @@ public:
 		change state of record i;
 		*/
 	static bool getBitmap(BufType p, int bitmapStart, int slot) {
-		char states = *((char*)p + bitmapStart + slot >> 3);
+		char states = *((char*)p + (bitmapStart + slot >> 3));
 		if (states & (1 << (slot & 7)))
 			return true;
 		return false;
 	}
-	static void setBitmap(BufType p, int slot, bool used) {
+	static void setBitmap(BufType p, int bitmapStart, int slot, bool used) {
 		char* data = ((char*)p + (bitmapStart + slot >> 3));
 		if (used) {
 			*data |= 1 << (slot & 7);
@@ -130,29 +137,31 @@ public:
 			ptr++;
 		}
 	}
-	static char* getRPtr(BufType p, int slot, int recordStart, int recordSize)
-	static void writeRecord(BufType p, int recordStart, int recordSize, int slot, char* data) {
+	static char* getRPtr(BufType p, int slot, int recordStart, int recordSize) {
+		return ((char*)p + (recordStart + slot * recordSize));
+	}
+	static void writeRecord(BufType p, int recordStart, int recordSize, int slot, const char* data) {
 		char* dest = ((char*)p + (recordStart + recordSize * slot));
 		memcpy(dest, data, recordSize);
 	}
-}
+};
 class Record {
 public:
 	Record() {}
 	Record(RID rid, char* data, int recordSize) {
-		this.rid.copy(rid);
-		this.data = data;
-		this.recordSize = recordSize;
+		this->rid.copy(rid);
+		this->data = data;
+		this->recordSize = recordSize;
 	}
 	void set(RID id, char* data, int recordSize) {
-		this.rid.copy(rid);
-		this.data = data;
-		this.recordSize = recordSize;
+		this->rid.copy(rid);
+		this->data = data;
+		this->recordSize = recordSize;
 	}
-	RID& getRID() {
+	RID getRID() const{
 		return this->rid;
 	}
-	char* getData() {
+	char* getData() const{
 		return this->data;
 	}
 private:
@@ -167,16 +176,17 @@ public:
 	friend class RecordHandle;
 	bool createFile(const char* filename, int recordSize);
 	bool destroyFile(const char* filename);
-	RecordHandle& openFile(const char* filename);
+	int openFile(const char* filename, RecordHandle& recordHandle);
 	bool closeFile(RecordHandle& recordHandle);
 private:
 	FileManager* fileManager;
 	BufPageManager* bufPageManager;
-}
+};
 class RecordHandle {
 public:
-	int getRec(const RID &rid, Record& record) const;
-	RID &insertRec(const char *data);
+	friend class RecordScan;
+	int getRec(const RID &rid, Record& record);
+	int insertRec(const char *data, RID& rid);
 	bool deleteRec(const RID &rid);
 	bool updateRec(const Record &rec);
 	bool init(const BufType firstPage, int fileID);
@@ -184,29 +194,34 @@ public:
 	bool isValid();
 	int getFileID();
 	int setIndex(int index) {
-		this->index = index
+		this->index = index;
 	}
-	void setManager(const RecordManager* rm) {
+	void setManager(RecordManager* rm) {
 		this->recordManager = rm;
 		this->fileManager = rm->fileManager;
 		this->bufPageManager = rm->bufPageManager;
 	}
-	int getPageNum() {
+	int getPageNum() const{
 		return this->fileHeader.pageNum;
 	}
-	int getSlotNum() {
+	int getSlotNum() const {
 		return this->fileHeader.recordNum;
 	}
-	int getRecordSize() {
+	int getRecordSize() const{
 		return this->fileHeader.recordSize;
 	}
-	int getRecordNum() {
+	int getRecordNum() const{
 		return this->fileHeader.recordNum;
 	}
+	int getBitmapStart() const {
+		return this->fileHeader.bitmapStart;
+	}
+	int getBitmapSize() const {
+		return this->fileHeader.bitmapSize;
+	} 
 private:
-	BufType& getPageContent(int page, int& index) {
-		BufType b = this->bufPageManager.getPage(this->fileID, page, index);
-		return b;
+	BufType getPageContent(int page, int& index) {
+		return this->bufPageManager->getPage(this->fileID, page, index);
 	}
 	RecordManager* recordManager;
 	FileManager* fileManager;
@@ -214,20 +229,25 @@ private:
 	struct FileHeader fileHeader;
 	int fileID, index;
 	bool valid;
-}
+};
 class RecordScan {
 public:
-	RecordScan openScan(const RecordHandle &recordHandle, AttrType attrType, int attrLength, int attrOffset, CompOp compOp, void *value);
+	RecordScan& openScan(const RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value);
 	int getNextRec(Record& record);  
 	bool closeScan();
 private:
 	RecordHandle& recordHandle;
-	AttrType attrType;
-	int attrLength, attrOffset, scanPage, scanSlot, pageNum, slotNum;
-	CompOp compOp;
+	constSpace::AttrType attrType;
+	int attrLength, attrOffset, scanPage, scanSlot, pageNum, slotNum, recordSize, bitmapStart, bitmapSize;
+	FileHeader fileHeader;
+	void setFileHeader(const FileHeader& fileHeader) {
+		this->fileHeader = fileHeader;
+	}
+	constSpace::CompOp compOp;
 	void* value;
-	void* comparator;
+	bool(*comparator)(void *, void *, constSpace::AttrType, int);
 	bool isValid;
 	int recordNum;
 	void moveAhead();
-}
+};
+#endif
