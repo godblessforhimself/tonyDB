@@ -15,7 +15,6 @@ using namespace std;
 #define MAX_INNER_NUM 67
 //#define MOD 61
 #define BIAS 5
-unsigned char h[61];
 
 
 class MyBitMap {
@@ -227,5 +226,7 @@ public:
 	void reLoad(uint* da) {
 		data = da;
 	}
+	static unsigned char h[61];
 };
+unsigned char MyBitMap::h[61] = {0};
 #endif

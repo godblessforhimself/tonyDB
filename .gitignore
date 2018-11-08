@@ -3,3 +3,7 @@
 *.exe
 *.layout
 *.win
+build/*
+*.d
+testfile
+makefile

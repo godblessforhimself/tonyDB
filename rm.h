@@ -1,9 +1,11 @@
 #ifndef RM_H
 #define RM_H
 #include "const.h"
-#include "filesystem/bufmanager/BufPageManager.h"
-#include "filesystem/fileio/FileManager.h"
+#include "filesystem/utils/pagedef.h"
+#include <string.h>
 #define PAGESIZE (8000)
+class FileManager;
+class BufPageManager;
 class RecordHandle;
 class RecordScan;
 class RID {
@@ -30,6 +32,9 @@ public:
 		this->pageIndex = p;
 		this->slotIndex = s;
 	}
+	void show() {
+		printf("RID[%d,%d]\n", pageIndex, slotIndex);
+	}
 private:
 	int pageIndex;
 	int slotIndex;
@@ -42,6 +47,11 @@ struct FileHeader {
 	int bitmapStart;	// the offset of bitmap in page
 	int bitmapSize;		// the size of bitmap
 	int recordStart;	// the offset of record
+	void debug() {
+		Debug::debug("FileHeader[rs %d, rn %d, pn %d, "
+			"next %d, bitmapStart %d, bitmapSize %d, recordStart %d]", \
+			recordSize, recordNum, pageNum, next, bitmapStart, bitmapSize, recordStart);
+	}
 };
 /*
 content page
@@ -79,14 +89,21 @@ public:
 	/* read state of record i;
 		change state of record i;
 		*/
+	static void charToBin(char c) {
+		for (int i = 0; i < 8; ++i) {
+			printf("%d", (c & (1 << i)) ? 1 : 0);
+		}
+	}
 	static bool getBitmap(BufType p, int bitmapStart, int slot) {
-		char states = *((char*)p + (bitmapStart + slot >> 3));
+		char states = *((char*)p + (bitmapStart + (slot >> 3)));
+		//Debug::debug("getBitmap [%d,%d] = ", slot, (slot >> 3));
+		//charToBin(states);
 		if (states & (1 << (slot & 7)))
 			return true;
 		return false;
 	}
 	static void setBitmap(BufType p, int bitmapStart, int slot, bool used) {
-		char* data = ((char*)p + (bitmapStart + slot >> 3));
+		char* data = ((char*)p + (bitmapStart + (slot >> 3)));
 		if (used) {
 			*data |= 1 << (slot & 7);
 		} else {
@@ -98,15 +115,15 @@ public:
 		char* bitmap = ((char*)p + bitmapStart);
 		int ptr = 0;
 		while (1) {
-			if (~bitmap[ptr]) {
-				break;
-			}
 			if (ptr >= bitmapSize) {
 				return -1;
 			}
+			if (~bitmap[ptr]) {
+				break;
+			}
 			ptr++;
 		}
-		for (int i = 0; i < 7; ++i) {
+		for (int i = 0; i < 8; ++i) {
 			if ((bitmap[ptr] & (1 << i)) == 0) {
 				return i + 8 * ptr;
 			}
@@ -119,15 +136,15 @@ public:
 		int ptr = pslot >> 3;
 		while (1) {
 			while (1) {
-				if (bitmap[ptr]) {
-					break;
-				}
 				if (ptr >= bitmapSize) {
 					return -1;
 				}
+				if (bitmap[ptr]) {
+					break;
+				}
 				ptr++;
 			}
-			for (int i = 0; i < 7; ++i) {
+			for (int i = 0; i < 8; ++i) {
 				if ((bitmap[ptr] & (1 << i))) {
 					int slot = i + 8 * ptr;
 					if (slot >= pslot)
@@ -147,11 +164,11 @@ public:
 };
 class Record {
 public:
-	Record() {}
+	Record() {
+		data = NULL;
+	}
 	Record(RID rid, char* data, int recordSize) {
-		this->rid.copy(rid);
-		this->data = data;
-		this->recordSize = recordSize;
+		set(rid, data, recordSize);
 	}
 	void set(RID id, char* data, int recordSize) {
 		this->rid.copy(rid);
@@ -190,10 +207,11 @@ public:
 	bool deleteRec(const RID &rid);
 	bool updateRec(const Record &rec);
 	bool init(const BufType firstPage, int fileID);
+	void writeFH();
 	RecordHandle();
 	bool isValid();
 	int getFileID();
-	int setIndex(int index) {
+	void setIndex(int index) {
 		this->index = index;
 	}
 	void setManager(RecordManager* rm) {
@@ -220,9 +238,7 @@ public:
 		return this->fileHeader.bitmapSize;
 	} 
 private:
-	BufType getPageContent(int page, int& index) {
-		return this->bufPageManager->getPage(this->fileID, page, index);
-	}
+	BufType getPageContent(int page, int& index);
 	RecordManager* recordManager;
 	FileManager* fileManager;
 	BufPageManager* bufPageManager;
@@ -232,11 +248,12 @@ private:
 };
 class RecordScan {
 public:
+	RecordScan() {}
 	RecordScan& openScan(const RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value);
 	int getNextRec(Record& record);  
 	bool closeScan();
 private:
-	RecordHandle& recordHandle;
+	RecordHandle recordHandle;
 	constSpace::AttrType attrType;
 	int attrLength, attrOffset, scanPage, scanSlot, pageNum, slotNum, recordSize, bitmapStart, bitmapSize;
 	FileHeader fileHeader;
