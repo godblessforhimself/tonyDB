@@ -24,6 +24,7 @@ protected:
 //	static const int MAX_INNER_NUM = 10;
 //	static const int MOD = 61;
 //	static unsigned char h[MOD];
+	static unsigned char h[61];
 	static uint getMask(int k) {
 		uint s = 0;
 		for (int i = 0; i < k; ++ i) {
@@ -226,7 +227,5 @@ public:
 	void reLoad(uint* da) {
 		data = da;
 	}
-	static unsigned char h[61];
 };
-unsigned char MyBitMap::h[61] = {0};
 #endif

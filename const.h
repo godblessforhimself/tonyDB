@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdarg.h>
+#include "filesystem/bufmanager/BufPageManager.h"
+#include "filesystem/fileio/FileManager.h"
 #define CopyANDPrint(x) printf("%s: ", x);\
 va_list args;\
 va_start(args, format);\

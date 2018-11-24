@@ -1,4 +1,5 @@
-#include "rm.h"
+#include "../../recordmanager/rm.h"
+#include "../../const.h"
 #define STRLEN 12
 #define filename ("testfile")
 #define recordSum (405)
@@ -36,8 +37,13 @@ int main() {
 		printf("----TestCase[%d]----\n", i + 1);
 	}
 }
+RecordManager init() {
+	FileManager* fileManager = new FileManager();
+	BufPageManager* bufPageManger = new BufPageManager(fileManager);
+	return RecordManager(fileManager, bufPageManger);
+}
 void testCase1() {
-	RecordManager rm;
+	RecordManager rm = init();
 	rm.destroyFile(filename);
 	rm.createFile(filename, sizeof(TestRec));
 	RecordHandle recordHandle;
@@ -72,7 +78,7 @@ void testCase1() {
 	rm.closeFile(recordHandle);
 }
 void testCase2() {
-	RecordManager rm;
+	RecordManager rm = init();
 	rm.destroyFile(filename);
 	rm.createFile(filename, sizeof(TestRec));
 	RecordHandle recordHandle;
@@ -104,7 +110,7 @@ void testCase2() {
 	rm.closeFile(recordHandle);
 }
 void testCase3() {
-	RecordManager rm;
+	RecordManager rm = init();
 	rm.destroyFile(filename);
 	rm.createFile(filename, sizeof(TestRec));
 	RecordHandle recordHandle;
@@ -139,7 +145,7 @@ void testCase3() {
 	rm.closeFile(recordHandle);
 }
 void testCase4() {
-	RecordManager rm;
+	RecordManager rm = init();
 	rm.destroyFile(filename);
 	rm.createFile(filename, sizeof(TestRec));
 	RecordHandle recordHandle;

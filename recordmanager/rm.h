@@ -1,7 +1,7 @@
 #ifndef RM_H
 #define RM_H
-#include "const.h"
-#include "filesystem/utils/pagedef.h"
+#include "../const.h"
+#include "../filesystem/utils/pagedef.h"
 #include <string.h>
 #define PAGESIZE (8000)
 class FileManager;
@@ -188,7 +188,7 @@ private:
 };
 class RecordManager {
 public:
-	RecordManager();
+	RecordManager(FileManager* fileManager, BufPageManager* bufPageManager);
 	~RecordManager();
 	friend class RecordHandle;
 	bool createFile(const char* filename, int recordSize);

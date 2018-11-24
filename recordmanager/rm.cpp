@@ -1,6 +1,6 @@
 #include "rm.h"
-#include "filesystem/bufmanager/BufPageManager.h"
-#include "filesystem/fileio/FileManager.h"
+#include "../filesystem/bufmanager/BufPageManager.h"
+#include "../filesystem/fileio/FileManager.h"
 #define markItDirty(x) (this->bufPageManager->markDirty((x)))
 #define recordPtr(x) (PageReader::getRPtr(b, x, this->fileHeader.recordStart, this->fileHeader.recordSize))
 void initFH(BufType fp, int rs) {
@@ -17,15 +17,13 @@ void initFH(BufType fp, int rs) {
 	fh->recordStart = addition + bitmapSize;
 	fh->debug();
 }
-RecordManager::RecordManager() {
+RecordManager::RecordManager(FileManager* fileManager, BufPageManager* bufPageManager) {
 	MyBitMap::initConst();
-	this->fileManager = new FileManager(); 
-	this->bufPageManager = new BufPageManager(this->fileManager);
+	this->fileManager = fileManager; 
+	this->bufPageManager = bufPageManager;
 }
 RecordManager::~RecordManager() {
 	this->bufPageManager->close();
-	delete this->bufPageManager;
-	delete this->fileManager;
 }
 bool RecordManager::createFile(const char* filename, int recordSize) {
 	/* create a file, then init settings in first page*/
