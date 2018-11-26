@@ -2,12 +2,30 @@
 #define INDEXING_H
 #include "../const.h"
 using namespace constSpace;
+class IX_IndexHandle;
+class BTree;
 struct Head_Page
 {
     char attrType[8];
-    int attrLength, entryLimit;
-    static void setHeader(BufType b, AttrType attrType, int attrLength) {
-
+    int attrLength, entryLimit, size;
+    void setHeader(BufType b, AttrType attrType, int attrLength) {
+        char typestr[8];
+        switch (attrType) {
+            case constSpace::INT:
+                strncpy(typestr, "INT", sizeof(typestr));
+                break;
+            case FLOAT:
+                strncpy(typestr, "FLOAT", sizeof(typestr));
+                break;
+            case STRING:
+                strncpy(typestr, "STRING", sizeof(typestr));
+                break;
+            default:
+                strncpy(typestr, "INVALID", sizeof(typestr));
+        }
+        memcpy((void*)b, typestr, sizeof(attrType));
+        this->attrLength = attrLength;
+        entryLimit = (PAGESIZE - sizeof(int) * 4) / (attrLength + sizeof(RID) + sizeof(int));
     }
     void parse(BufType b) {
     	Head_Page* ptr = (Head_Page*)b;
@@ -16,6 +34,65 @@ struct Head_Page
     	entryLimit = ptr->entryLimit;
     	
 	}
+};
+struct Content_Page
+{
+    int parent, dataSize, childSize;
+    char* values;
+    char* rids;
+    char* childs;
+};
+struct BTNode {
+    int* parent;
+    char* values;
+    RID* rids;
+    int* childs;
+    int* data_size, *child_size;
+/* =================== */
+    int entryLimit, attrLength;
+    int pageID;
+    AttrType attrType;
+    BTNode();
+    void withEmptyPage(BufType b, BTree btree, int pID);
+    void withContentPage(BufType b, BTree btree, int pID);
+    int comp(char* v1, char* v2);
+    int search(char* data, const RID& rid);
+    bool equals(int dataindex, char* data, const RID& rid);
+    int getChild(int child);
+    void setChild(int rank, int pageID);
+    void getData(int rank, char* data, RID& rid);
+    void setData(int rank, char* data, RID& rid);
+    void removeData(int rank);
+    void removeData(int rank, char* data, RID& rid);
+    int removeChild(int rank);
+    void insertData(int rank, char* data, const RID& rid);
+    void insertChild(int rank, int id);
+    void insertFrom(int r1, BTNode& node, int r2);
+    int getChildSize();
+    int getDataSize();
+    int getID();
+    int getParent();
+    void setParent(int p);
+    bool isLeaf();
+};
+class BTree {
+public:
+    friend struct BTNode;
+    int search(char* e, const RID& rid);
+    bool insert(char* e, const RID& rid);
+    bool remove(char* e, const RID& rid);
+    void init(BufType b, int fileID, FileManager* fileManager, BufPageManager* bufPageManager);
+private:
+    int _size; int _order; int _root;
+    int _hot; int attrLength;
+    int fileID;
+    struct Head_Page headPage;
+    FileManager* fileManager;
+    BufPageManager* bufPageManager;
+    void solveOverflow(BTNode&);
+    void solveUnderflow(BTNode&);
+    BTNode loadNode(int id);
+    BTNode createNode();
 };
 class IX_Manager {
 public:
@@ -39,10 +116,7 @@ public:
     int DeleteEntry(void *pData, const RID &rid);  // Delete index entry
     int ForcePages();                             // Copy index to disk
 private:
-	int fileID;
-	struct Head_Page headPage;
-	FileManager* fileManager;
-    BufPageManager* bufPageManager;
+    BTree btree;
 };
 class IX_IndexScan {
 public:
@@ -52,3 +126,4 @@ public:
     int GetNextEntry(RID &rid);                         // Get next matching entry
     int CloseScan();                                 // Terminate index scan
 };
+#endif
