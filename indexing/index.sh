@@ -1,12 +1,13 @@
 indexing="./"
-result="rmtestresult"
+result="result"
 bitmap="../filesystem/utils/MyBitMap.cpp"
 mkdir build
-#g++ -c rmtest.cpp -o build/rmtest.o
-g++ -c ${indexing}indexing.cpp -o build/indexing.o
-g++ -c ${bitmap} -o build/bitmap.o
-#g++ build/rmtest.o build/rm.o build/bitmap.o -o rm
-#echo "执行结果 > ${result}"
-#./rm > $result
+g++ -std=c++11 -c indexing_test.cpp -o build/test.o
+g++ -std=c++11 -c ${indexing}indexing.cpp -o build/indexing.o
+g++ -std=c++11 -c ${bitmap} -o build/bitmap.o
+g++ -std=c++11 -c ../const.cpp -o build/const.o
+g++ -std=c++11 build/const.o build/test.o build/indexing.o build/bitmap.o -o indexing
+echo "执行结果 > ${result}"
+./indexing > $result
 #g++ -E rmtest.cpp -o build/rmtest.ii
 #g++ -E rm.cpp -o build/rm.ii

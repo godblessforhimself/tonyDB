@@ -28,6 +28,12 @@ namespace constSpace {
 	    NO_OP,                                      // no comparison
 	    EQ_OP, NE_OP, LT_OP, GT_OP, LE_OP, GE_OP    // binary atomic operators
 	};
+	bool equal(void* value1, void* value2, constSpace::AttrType attrtype, int attrLength);
+	bool less_than(void* value1, void* value2, constSpace::AttrType attrtype, int attrLength);
+	bool greater_than(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
+	bool less_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
+	bool greater_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
+	bool not_equal(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
 }
 class RID {
 public:
@@ -76,6 +82,17 @@ class Debug {
 	static const int ERROR = -1;
 	static const int level = DEBUG;
 public:
+	static const int BTREE_REMOVE = 0;
+	static const int key = BTREE_REMOVE + 1;
+	static void print(int keyword, const char* format, ...) {
+		if (key == keyword) {
+			va_list args;
+			va_start(args, format);
+			vprintf(format, args);
+			va_end(args);
+			printf("\n");
+		}
+	}
 	static void debug(const char* format, ...) {
 		if (level >= DEBUG) {
 			CopyANDPrint("DEBUG");

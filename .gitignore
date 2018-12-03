@@ -7,3 +7,7 @@ build/*
 *.d
 testfile
 makefile
+*.pdf
+*.tag*
+*.db*
+*result*

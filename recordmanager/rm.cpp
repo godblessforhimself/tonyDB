@@ -261,52 +261,6 @@ int RecordHandle::getFileID() {
 }
 
 /* ======================================================= */
-bool equal(void* value1, void* value2, constSpace::AttrType attrtype, int attrLength) {
-	switch (attrtype) {
-	    case constSpace::FLOAT: return (*(float*)value1 == *(float*)value2);
-	    case constSpace::INT: return (*(int*)value1 == *(int*)value2) ;
-	    default: return (strncmp((char*) value1, (char*) value2, attrLength) == 0); 
-  	}
-}
-bool less_than(void* value1, void* value2, constSpace::AttrType attrtype, int attrLength) {
-  	switch (attrtype) {
-    	case constSpace::FLOAT: return (*(float*)value1 < *(float*)value2);
-    	case constSpace::INT: return (*(int*)value1 < *(int*)value2);
-    	default: return (strncmp((char*) value1, (char*) value2, attrLength) < 0);
-  }
-}
-
-bool greater_than(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength){
- 	switch (attrtype) {
-   		case constSpace::FLOAT: return (*(float *)value1 > *(float*)value2);
-    	case constSpace::INT: return (*(int *)value1 > *(int *)value2) ;
-    	default: return (strncmp((char *) value1, (char *) value2, attrLength) > 0);
-  }
-}
-
-bool less_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength){
-  	switch(attrtype){
-    	case constSpace::FLOAT: return (*(float *)value1 <= *(float*)value2);
-    	case constSpace::INT: return (*(int *)value1 <= *(int *)value2) ;
-    	default: return (strncmp((char *) value1, (char *) value2, attrLength) <= 0);
-  }
-}
-
-bool greater_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength){
-  	switch(attrtype){
-    	case constSpace::FLOAT: return (*(float *)value1 >= *(float*)value2);
-    	case constSpace::INT: return (*(int *)value1 >= *(int *)value2) ;
-    	default: return (strncmp((char *) value1, (char *) value2, attrLength) >= 0);
-  }
-}
-
-bool not_equal(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength){
-  	switch(attrtype){
-    	case constSpace::FLOAT: return (*(float *)value1 != *(float*)value2);
-    	case constSpace::INT: return (*(int *)value1 != *(int *)value2) ;
-    	default: return (strncmp((char *) value1, (char *) value2, attrLength) != 0);
-  }
-}
 RecordScan& RecordScan::openScan(const RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value) {
 	this->isValid = true;
 	this->recordHandle = recordHandle;
@@ -381,6 +335,7 @@ int RecordScan::getNextRec(Record& record) {
 	}
 }
 bool RecordScan::closeScan() {
+	delete value;
 	return true;
 }
 void RecordScan::moveAhead() {

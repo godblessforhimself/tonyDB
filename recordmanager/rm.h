@@ -3,42 +3,10 @@
 #include "../const.h"
 #include "../filesystem/utils/pagedef.h"
 #include <string.h>
-#define PAGESIZE (8000)
 class FileManager;
 class BufPageManager;
 class RecordHandle;
 class RecordScan;
-class RID {
-public:
-	RID(int p, int s) {
-		this->pageIndex = p;
-		this->slotIndex = s;
-	}
-	RID() {
-		this->pageIndex = -1;
-		this->slotIndex = -1;
-	}
-	int getPage() const{
-		return this->pageIndex;
-	}
-	int getSlot() const {
-		return this->slotIndex;
-	}
-	void copy(RID rid) {
-		this->pageIndex = rid.pageIndex;
-		this->slotIndex = rid.slotIndex;
-	}
-	void set(int p, int s) {
-		this->pageIndex = p;
-		this->slotIndex = s;
-	}
-	void show() {
-		printf("RID[%d,%d]\n", pageIndex, slotIndex);
-	}
-private:
-	int pageIndex;
-	int slotIndex;
-};
 struct FileHeader {
 	int recordSize;		
 	int recordNum;		// every page record limit number
@@ -260,8 +228,8 @@ private:
 	void setFileHeader(const FileHeader& fileHeader) {
 		this->fileHeader = fileHeader;
 	}
-	constSpace::CompOp compOp;
 	void* value;
+	constSpace::CompOp compOp;
 	bool(*comparator)(void *, void *, constSpace::AttrType, int);
 	bool isValid;
 	int recordNum;
