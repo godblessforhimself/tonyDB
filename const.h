@@ -59,7 +59,7 @@ public:
 		this->pageIndex = p;
 		this->slotIndex = s;
 	}
-	void show() {
+	void show() const {
 		printf("RID[%d,%d]\n", pageIndex, slotIndex);
 	}
 	static int comp(const RID& r1, const RID& r2) {
@@ -83,7 +83,10 @@ class Debug {
 	static const int level = DEBUG;
 public:
 	static const int BTREE_REMOVE = 0;
-	static const int key = BTREE_REMOVE + 1;
+	static const int BTREE_INSERT = BTREE_REMOVE + 1;
+	static const int BTREE_PRINT_DATA_DETAIL = BTREE_INSERT + 1;
+	static const int BTREE_LINK_DETAIL = BTREE_PRINT_DATA_DETAIL + 1;
+	static const int key = -1;
 	static void print(int keyword, const char* format, ...) {
 		if (key == keyword) {
 			va_list args;
@@ -91,6 +94,14 @@ public:
 			vprintf(format, args);
 			va_end(args);
 			printf("\n");
+		}
+	}
+	static void debugL(const char* format, ...) {
+		if (level >= DEBUG) {
+			va_list args;
+			va_start(args, format);
+			vprintf(format, args);
+			va_end(args);
 		}
 	}
 	static void debug(const char* format, ...) {

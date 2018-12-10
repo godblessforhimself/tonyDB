@@ -11,3 +11,4 @@ makefile
 *.tag*
 *.db*
 *result*
+/.vscode

@@ -7,7 +7,7 @@ class BTree;
 struct Head_Page
 {
     char attrType[8];
-    int attrLength, entryLimit, pageNum, root, nextFree, entryNum;
+    int attrLength, entryLimit, pageNum, root, nextFree, entryNum, right;
     static void setHeader(BufType b, AttrType attrType, int attrLength);
     void parse(BufType b);
     void set(BufType b);
@@ -15,31 +15,33 @@ struct Head_Page
 };
 struct Content_Page
 {
-    int parent, dataSize, childSize, prevFree, nextFree;
-    char* values;
-    RID* rids;
+    int parent, left, right, prevFree, nextFree, entryCount, childCount, isLeaf;
+    char* values; RID* rids;
     int* childs;
 };
 struct BTNode {
-    int* parent;
-    char* values;
-    RID* rids;
+    int* parent, *left, *right, *prev_free, *next_free, *entry_count, *child_count, *is_leaf;
+    char* values; RID* rids;
     int* childs;
-    int* data_size, *child_size, *prev_free, *next_free;
 /* =================== */
-    int entryLimit, attrLength;
+    static int entryLimit;
+    static int attrLength;
+    static AttrType attrType;
+    static BufPageManager* bufPageManager;
     int pageID, bufIndex;
-    AttrType attrType;
-    BufPageManager* bufPageManager;
+    BTNode();
     BTNode(BufPageManager* bufPageManager);
     void withEmptyPage(BufType b, Head_Page headPage, int pID, int index);
     void withContentPage(BufType b, Head_Page headPage, int pID, int index);
-    int comp(char* v1, char* v2);
+    static int comp(char* v1, char* v2);
+    static int comp(char* v1, const RID& r1, char* v2, const RID& r2);
+    static int getParentRank(const BTNode&, const BTNode&);
     int search(char* data, const RID& rid);
-    bool equals(int dataindex, char* data, const RID& rid);
+    int search(char* data, const RID& rid, bool isLeaf);
     int getChild(int child) const;
     void setChild(int rank, int pageID);
     void getData(int rank, char* data, RID& rid) const;
+    int getNextData(int& rank, char* data, RID& rid) const;
     void setData(int rank, char* data, RID& rid);
     void removeData(int rank);
     void removeData(int rank, char* data, RID& rid);
@@ -51,6 +53,7 @@ struct BTNode {
     int getParent() const;
     void markDirty() const;
     void setParent(int p);
+    void setLeaf(bool);
     bool isLeaf() const;
     void print() const;
 };
@@ -79,23 +82,33 @@ class IX_IndexHandle {
     void init(int fileID, BufType b, IX_Manager* ix_manager);
     void traverse();
     void traverse(int pageID);
+    void printFreeLink();
     void printHeadPage();
+    void findFirstValue(void* value, int& pageID, int& rank);
+    int findLastValue(void* value, int& pageID, int& rank, RID& rid);
     IX_IndexHandle();                             // Constructor
     ~IX_IndexHandle();                             // Destructor
     int InsertEntry(void *pData, const RID &rid);  // Insert new index entry
     int DeleteEntry(void *pData, const RID &rid);  // Delete index entry
     int SearchEntry(void *pData, RID& rid, bool compare); // 搜索大于pData rid并更新
     int ForcePages();                             // Copy index to disk
+    BTNode loadNode(int id);
+    BTNode loadFirstLeaf();
+    int loadNextNode(BTNode& node);
 private:
     int _hot; int attrLength;
     int fileID;
     struct Head_Page headPage;
     FileManager* fileManager;
     BufPageManager* bufPageManager;
+    int updateParent(BTNode& node_v);
+    int updateParent(BTNode& node_v, int rank);
+    void updateToRoot(int v);
     void solveOverflow(BTNode&);
     void solveUnderflow(BTNode&);
-    BTNode loadNode(int id);
     BTNode createNode();
+    void removeLeafLink(BTNode& node);
+    void addLeafLinkAfter(BTNode& node_v, BTNode& node_after);
     int searchEntryRecur(int v, void *pData, RID& rid);
     void removeLink(const BTNode& node);
     void addLink(const BTNode& node);
@@ -104,14 +117,19 @@ class IX_IndexScan {
 private:
     void* value, *current_value;
     RID current_RID;
+    int rank;
     AttrType attrType; CompOp compOp; int attrLength, numScanned;
+    bool reverse;
     bool(*comparator)(void *, void *, AttrType, int);
     IX_IndexHandle* indexHandle;
+    BTNode node_current;
 public:
 	IX_IndexScan();                                 // Constructor
     ~IX_IndexScan();                                 // Destructor
     int OpenScan(IX_IndexHandle &indexHandle, CompOp compOp, void *value);           
     int GetNextEntry(RID &rid);                         // Get next matching entry
     int CloseScan();                                 // Terminate index scan
+    int tryLoadNext(BTNode& node, int& rank, char* data, RID& rid);
+    int findNext(RID& rid);
 };
 #endif
