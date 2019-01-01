@@ -1,5 +1,11 @@
 # database class project , by tony 2015011284
 
+
+## todo
+* 属性
+* 为空，rm每项增加一个isNull的bool
+* 修改rm和ix的操作
+
 ## 记录管理模块
 
 - ### 记录：长度可变的字节数组，唯一标识RID

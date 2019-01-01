@@ -1,12 +1,13 @@
 #ifndef FILE_MANAGER
 #define FILE_MANAGER
-#include <string>
+#include <string.h>
 #include <stdio.h>
 #include <iostream>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "../utils/MyBitMap.h"
 //#include "../MyLinkList.h"
 using namespace std;
 class FileManager {

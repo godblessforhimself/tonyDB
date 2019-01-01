@@ -27,22 +27,25 @@ RecordManager::~RecordManager() {
 }
 bool RecordManager::createFile(const char* filename, int recordSize) {
 	/* create a file, then init settings in first page*/
-	bool created = this->fileManager->createFile(filename);
-	if (!created) {
-		printf("RecordManager::createFile fail to createFile!\n");
+	Debug::debug("RecordManager::createFile %s:\n", filename);
+	if (!fileManager->createFile(filename)) {
+		Debug::debug("RecordManager::createFile createFile failed!\n");
 		return false;
 	}
 	int fileID;
-	if (!this->fileManager->openFile(filename, fileID)) {
-		printf("RecordManager::createFile fail to openFile!\n");
+	if (!fileManager->openFile(filename, fileID)) {
+		Debug::debug("RecordManager::createFile openFile failed!\n");
 		return false;
 	}
 	int index;
-	BufType firstPage = this->bufPageManager->allocPage(fileID, 0, index, false);
+	BufType firstPage = bufPageManager->allocPage(fileID, 0, index, false);
 	initFH(firstPage, recordSize);
-	this->bufPageManager->markDirty(index);
-	this->bufPageManager->writeBack(index);
-	printf("RecordManager::createFile success!\n");
+	bufPageManager->markDirty(index);
+	bufPageManager->writeBack(index);
+	if (fileManager->closeFile(fileID) != 0) {
+		Debug::debug("RecordManager::createFile closeFile failed!");
+	}
+	Debug::debug("RecordManager::createFile %s success!\n", filename);
 	return true;
 }
 bool RecordManager::destroyFile(const char* filename) {
@@ -261,7 +264,7 @@ int RecordHandle::getFileID() {
 }
 
 /* ======================================================= */
-RecordScan& RecordScan::openScan(const RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value) {
+int RecordScan::openScan(const RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value) {
 	this->isValid = true;
 	this->recordHandle = recordHandle;
 	this->attrType = attrType;
@@ -290,9 +293,9 @@ RecordScan& RecordScan::openScan(const RecordHandle &recordHandle, constSpace::A
 	    case constSpace::GE_OP : comparator = &greater_than_or_eq_to; break;
 	    case constSpace::NE_OP : comparator = &not_equal; break;
 	    case constSpace::NO_OP : comparator = NULL; break;
-	    default: printf("invalid compOp\n"); this->isValid = false;
+	    default: printf("invalid compOp\n"); this->isValid = false; return -1;
   	}
-  	return *this;
+  	return 0;
 }
 int RecordScan::getNextRec(Record& record) {
 	if (!isValid)
@@ -335,7 +338,7 @@ int RecordScan::getNextRec(Record& record) {
 	}
 }
 bool RecordScan::closeScan() {
-	delete value;
+	delete[] (char*)value;
 	return true;
 }
 void RecordScan::moveAhead() {

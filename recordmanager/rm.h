@@ -3,8 +3,9 @@
 #include "../const.h"
 #include "../filesystem/utils/pagedef.h"
 #include <string.h>
+using namespace constSpace;
 class FileManager;
-class BufPageManager;
+struct BufPageManager;
 class RecordHandle;
 class RecordScan;
 struct FileHeader {
@@ -135,19 +136,24 @@ public:
 	Record() {
 		data = NULL;
 	}
+	~Record() {
+		if (data != NULL) 
+			delete[] data;
+	}
 	Record(RID rid, char* data, int recordSize) {
 		set(rid, data, recordSize);
 	}
 	void set(RID id, char* data, int recordSize) {
 		this->rid.copy(rid);
-		this->data = data;
+		this->data = new char[recordSize];
+		memcpy(this->data, data, recordSize);
 		this->recordSize = recordSize;
 	}
 	RID getRID() const{
-		return this->rid;
+		return rid;
 	}
 	char* getData() const{
-		return this->data;
+		return data;
 	}
 private:
 	RID rid;
@@ -217,7 +223,7 @@ private:
 class RecordScan {
 public:
 	RecordScan() {}
-	RecordScan& openScan(const RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value);
+	int openScan(const RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value);
 	int getNextRec(Record& record);  
 	bool closeScan();
 private:

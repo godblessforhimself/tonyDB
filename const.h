@@ -5,10 +5,14 @@
 #include <string.h>
 #include <assert.h>
 #include <stdarg.h>
-#include "filesystem/bufmanager/BufPageManager.h"
+#include "filesystem/utils/pagedef.h"
 #include "filesystem/fileio/FileManager.h"
+#include "filesystem/bufmanager/BufPageManager.h"
 #define PAGESIZE (8000)
+#define MAX_LIST_LENGTH (16)
 #define NULL_NODE (0)
+#define MAX_RELNAME_LENGTH (32)
+#define MAX_ATTRNAME_LENGTH (32)
 #define MAX_FILENAME_LENGTH (256)
 #define MAX_ATTRLENGTH (8096)
 #define CopyANDPrint(x) printf("%s: ", x);\
@@ -18,10 +22,13 @@ vprintf(format, args);\
 va_end(args);\
 printf("\n")
 namespace constSpace {
+	const char attributeCatalogName[] = "attrcat";
+	const char relationCatalogName[] = "relcat";
 	enum AttrType {
 	    INT,
 	    FLOAT,
 	    STRING,
+		DATE,
 	    INVALID
 	};
 	enum CompOp {
@@ -34,7 +41,104 @@ namespace constSpace {
 	bool less_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
 	bool greater_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
 	bool not_equal(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
+	struct AttrInfo {
+		// 解析器传入的属性数组
+		char     *attrName;           // Attribute name
+		AttrType attrType;            // Type of attribute
+		int      attrLength;          // Length of attribute
+	};
+	struct RelationEntry {
+		// 一个数据表对应一项
+		char relName[MAX_RELNAME_LENGTH];
+		int tupleLength;	// 占用的字节
+		int attrCount;		// 属性数
+		int indexCount;		// 索引数
+	};
+	struct AttributeEntry {
+		// 一个属性对应一项
+		char relName[MAX_RELNAME_LENGTH];
+		char attrName[MAX_ATTRNAME_LENGTH];
+		int offset;
+		AttrType attrType;
+		int attrLenth;
+		int indexNo;
+		bool isPrimarykey;
+		bool notNull;
+		bool useForeignkey;
+		char foreignTable[MAX_RELNAME_LENGTH];
+		char foreignName[MAX_ATTRNAME_LENGTH];
+	};
+	int getattrlength(AttrType);
+	void transAttrType(AttrType type, char* dst);
+	typedef enum {
+		N_ATTRTYPE,
+		N_FIELD,
+		N_FIELD_LIST,
+		N_FIELD_PRIMARY_KEY_LIST,
+		N_STRING_LIST
+	} NodeType;
+	enum FieldType {
+		f_normal,
+		f_notnull,
+		f_foreign_key
+	};
+	struct parser_node {
+		NodeType nType;
+		union{
+			struct{
+				AttrType* type;
+				int len;
+			} ATTRTYPE;
+			struct {
+				FieldType ftype;
+				union {
+					struct {
+						char* colname;
+						parser_node* type;
+					} normal;
+					struct {
+						// 非空
+						char* colname;
+						parser_node* type;
+					} notnull;
+					struct {
+						// 对应于外键
+						char* localname;
+						char* foreigntable;
+						char* foreignname;
+					} foreignkey;
+				} v;
+			} Field;
+			struct {
+				// 指针: normal, notnull, foreignkey, primarylist
+				parser_node *fList[MAX_LIST_LENGTH];
+				int len;
+			} FieldList;
+			struct {
+				char* stringlist[MAX_LIST_LENGTH];
+				int len;
+			} StringList;
+		} u;
+		void set_attr_type(AttrType*, int);
+		void set_field_normal(char*, parser_node*);
+		void set_field_notnull(char*, parser_node*);
+		void set_field_foreign_key(char* loc, char* ftable, char *fname);
+		void init_field_list();
+		void field_list_append(parser_node*);
+		void init_string_list();
+		void append_string_list(char *);
+		void set_field_primary_list();
+		void print(ostream& o);
+		void printStringList(ostream &o);
+	};
 }
+class Printer {
+public: 
+ 	Printer();
+    ~Printer();         
+    void printRelation(ostream &c, constSpace::RelationEntry* entry);
+	void printAttribute(ostream &c, constSpace::AttributeEntry* entry);
+};
 class RID {
 public:
 	RID(int p, int s) {

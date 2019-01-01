@@ -925,6 +925,7 @@ int BTNode::comp(char* v1, char* v2) {
             Debug::produce("BTNode comp invalid type");
             return 0;
     }
+    return 0;
 }
 int BTNode::comp(char* v1, const RID& r1, char* v2, const RID& r2) {
     int value = 0;
