@@ -169,8 +169,10 @@ bool RecordHandle::deleteRec(const RID &rid) {
 	}
 	assert((page < fileHeader.pageNum) && (slot < fileHeader.recordNum));
 	// find the page 
+	cout << fileID << " ," <<  page << endl;
 	BufType b = bufPageManager->getPage(fileID, page, index), temp;
 	// check if bitmap[slot] is true 
+	printf("lp\n");
 	if (PageReader::getBitmap(b, fileHeader.bitmapStart, slot)) {
 		// revise bitmap and count mark it dirty
 		PageReader::setBitmap(b, fileHeader.bitmapStart, slot, false);
@@ -220,7 +222,7 @@ bool RecordHandle::deleteRec(const RID &rid) {
 		printf("deleteRec::delete a record not exist:[%d,%d]", page, slot);
 		return false;
 	}
-	return false;
+	return true;
 }
 BufType RecordHandle::getPageContent(int page, int& index) {
 	return this->bufPageManager->getPage(this->fileID, page, index);
@@ -308,6 +310,7 @@ int RecordScan::getNextRec(Record& record) {
 		scanSlot = 0;
 	}
 	while (1) {
+		printf("looping!\n");
 		if (scanPage >= pageNum) {
 			return -1;
 		}
@@ -317,17 +320,18 @@ int RecordScan::getNextRec(Record& record) {
 		scanSlot = nextUsedSlot;
 		assert(nextUsedSlot < slotNum);
 		if (nextUsedSlot < 0) {
-			// this page has no valid record
+			// 跳到下一页
 			scanPage++;
 			scanSlot = 0;
 		} else {
-			// check record valid , set slot
+			// 检查是否有效
 			char* rdata = (recordPtr(nextUsedSlot));
 			void* v1 = (void*)(rdata + this->attrOffset);
 			bool valid = (comparator == NULL) ? true : comparator(v1, this->value, this->attrType, this->attrLength);
 			if (valid) {
-				//find next record return.
+				// 只在这里返回
 				RID rid(this->scanPage, nextUsedSlot);
+				rid.show();
 				record.set(rid, rdata, this->recordSize);
 				moveAhead();
 				return 0;
@@ -336,6 +340,9 @@ int RecordScan::getNextRec(Record& record) {
 			}
 		}
 	}
+}
+RecordScan::~RecordScan() {
+	delete[] (char*)value;
 }
 bool RecordScan::closeScan() {
 	delete[] (char*)value;

@@ -144,7 +144,9 @@ public:
 		set(rid, data, recordSize);
 	}
 	void set(RID id, char* data, int recordSize) {
-		this->rid.copy(rid);
+		this->rid.copy(id);
+		if (this->data != NULL)
+			delete[] this->data;
 		this->data = new char[recordSize];
 		memcpy(this->data, data, recordSize);
 		this->recordSize = recordSize;
@@ -223,6 +225,7 @@ private:
 class RecordScan {
 public:
 	RecordScan() {}
+	~RecordScan();
 	int openScan(const RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value);
 	int getNextRec(Record& record);  
 	bool closeScan();
