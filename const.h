@@ -9,12 +9,12 @@
 #include "filesystem/fileio/FileManager.h"
 #include "filesystem/bufmanager/BufPageManager.h"
 #define PAGESIZE (8000)
-#define MAX_LIST_LENGTH (16)
 #define NULL_NODE (0)
 #define MAX_RELNAME_LENGTH (32)
 #define MAX_ATTRNAME_LENGTH (32)
 #define MAX_FILENAME_LENGTH (256)
 #define MAX_ATTRLENGTH (8096)
+#define OFFSETOF(s,m) (size_t) &(((s*)0)->m)
 #define CopyANDPrint(x) printf("%s: ", x);\
 va_list args;\
 va_start(args, format);\
@@ -24,6 +24,11 @@ printf("\n")
 namespace constSpace {
 	const char attributeCatalogName[] = "attrcat";
 	const char relationCatalogName[] = "relcat";
+	const char attr_int[] = "int";
+	const char attr_float[] = "float";
+	const char attr_string[] = "string";
+	const char attr_date[] = "date";
+	const char attr_invalid[] = "invalid";
 	enum AttrType {
 	    INT,
 	    FLOAT,
@@ -35,12 +40,14 @@ namespace constSpace {
 	    NO_OP,                                      // no comparison
 	    EQ_OP, NE_OP, LT_OP, GT_OP, LE_OP, GE_OP    // binary atomic operators
 	};
+	bool (*getComparator(CompOp op))(void*, void*, AttrType, int);
 	bool equal(void* value1, void* value2, constSpace::AttrType attrtype, int attrLength);
 	bool less_than(void* value1, void* value2, constSpace::AttrType attrtype, int attrLength);
 	bool greater_than(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
 	bool less_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
 	bool greater_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
 	bool not_equal(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength);
+	CompOp getopByfunc(bool (*)(void*, void*, AttrType, int));
 	struct AttrInfo {
 		// 解析器传入的属性数组
 		char     *attrName;           // Attribute name
@@ -58,9 +65,9 @@ namespace constSpace {
 		// 一个属性对应一项
 		char relName[MAX_RELNAME_LENGTH];
 		char attrName[MAX_ATTRNAME_LENGTH];
-		int offset;
+		int offset; // 真实的地址
 		AttrType attrType;
-		int attrLenth;
+		int attrLenth;	//指传入的括号中的数，在string时有效
 		int indexNo;
 		bool isPrimarykey;
 		bool notNull;
@@ -70,23 +77,49 @@ namespace constSpace {
 	};
 	int getattrlength(AttrType);
 	void transAttrType(AttrType type, char* dst);
+	AttrType getAttrType(char *src);
 	typedef enum {
 		N_ATTRTYPE,
 		N_FIELD,
 		N_FIELD_LIST,
-		N_FIELD_PRIMARY_KEY_LIST,
-		N_STRING_LIST
+		N_STRING_LIST,
+		N_VALUE,
+		N_VALUE_LIST,
+		N_VALUE_LISTS,
+		N_COL_OR_VALUE,
+		N_COL,
+		N_CONDITION,
+		N_IS_NULL_COND,
+		N_NOT_NULL_COND,
+		N_WHERE,
+		N_LIST,
+		N_SET,
+		N_SELECTOR
 	} NodeType;
 	enum FieldType {
 		f_normal,
 		f_notnull,
 		f_foreign_key
 	};
+	enum ValueType {
+		v_null,
+		v_int,
+		v_string,
+		v_float,
+		v_date
+	};
 	struct parser_node {
 		NodeType nType;
 		union{
+			struct {
+				parser_node *colList;
+			} Selector;
+			struct {
+				char *colName;
+				parser_node *value;
+			} SingleSet;
 			struct{
-				AttrType* type;
+				AttrType type;
 				int len;
 			} ATTRTYPE;
 			struct {
@@ -109,29 +142,81 @@ namespace constSpace {
 					} foreignkey;
 				} v;
 			} Field;
-			struct {
+			/* struct {
 				// 指针: normal, notnull, foreignkey, primarylist
 				parser_node *fList[MAX_LIST_LENGTH];
 				int len;
-			} FieldList;
+			} FieldList; */
 			struct {
-				char* stringlist[MAX_LIST_LENGTH];
-				int len;
+				char *string;
+				parser_node *next, *tail;
 			} StringList;
+			struct {
+				ValueType vtype;
+				union {
+					int integer;
+					char *string;
+				} value;
+			} Value;
+			struct {
+				parser_node *value, *next, *tail;
+			} ValueList;
+			struct {
+				parser_node *value, *next, *tail;
+			} ValueLists;
+			struct {
+				char *tbName;
+				char *colName;
+			} Col;
+			struct {
+				parser_node *col;
+				parser_node *value;
+			} ColOrValue;
+			struct {
+				parser_node *lh;
+				CompOp op;
+				parser_node *expr;
+			} Condition;
+			struct {
+				parser_node *lh;
+			} IsNullCond;
+			struct {
+				parser_node *lh;
+			} NotNullCond;
+			struct {
+				parser_node *value, *next, *tail;
+			} List;
 		} u;
-		void set_attr_type(AttrType*, int);
+		void set_selector(parser_node *);
+		void single_set(char *, parser_node *);
+		void set_value();
+		void set_value(int);
+		void set_value(char*);
+		void set_col(char *tb, char *col);
+		void col_or_value(parser_node *c, parser_node *v);
+		void set_normal_condition(parser_node *l, CompOp o, parser_node *r);
+		void set_null_cond(parser_node *l);
+		void set_notnull_cond(parser_node *l);
+		void init_list(parser_node*);
+		void append_list(parser_node *value, parser_node *newpoint);
+		void init_value_list(parser_node*);
+		void append_value_list(parser_node*, parser_node*);
+		void init_value_lists(parser_node*);
+		void append_value_lists(parser_node*, parser_node*);
+		void set_attr_type(AttrType, int);
 		void set_field_normal(char*, parser_node*);
 		void set_field_notnull(char*, parser_node*);
 		void set_field_foreign_key(char* loc, char* ftable, char *fname);
-		void init_field_list();
-		void field_list_append(parser_node*);
-		void init_string_list();
-		void append_string_list(char *);
-		void set_field_primary_list();
-		void print(ostream& o);
+		void init_string_list(char *);
+		void append_string_list(char *, parser_node *);
+		void printValue(ostream &o);
 		void printStringList(ostream &o);
+		void printValueList(ostream &o);
 	};
+	bool twoTypeMatch(AttrType, ValueType);
 }
+void setBitmap(int, void*, int);
+int getBitmap(int, void*);
 class Printer {
 public: 
  	Printer();
@@ -178,6 +263,40 @@ public:
 private:
 	int pageIndex;
 	int slotIndex;
+};
+class Record {
+public:
+	Record() {
+		data = NULL;
+	}
+	~Record() {
+		if (data != NULL) {
+			delete[] data;
+		}
+	}
+	Record(RID rid, char* data, int recordSize) {
+		data = NULL;
+		set(rid, data, recordSize);
+	}
+	void set(RID id, char* data, int recordSize) {
+		this->rid.copy(id);
+		if (this->data != NULL) {
+			delete[] this->data;
+		}
+		this->data = new char[recordSize];
+		memcpy(this->data, data, recordSize);
+		this->recordSize = recordSize;
+	}
+	RID getRID() const{
+		return rid;
+	}
+	char* getData() const{
+		return data;
+	}
+private:
+	RID rid;
+	char* data;
+	int recordSize;
 };
 class Debug {
 	static const int DEBUG = 0;

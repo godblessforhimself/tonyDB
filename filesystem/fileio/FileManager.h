@@ -116,7 +116,8 @@ public:
 	bool openFile(const char* name, int& fileID) {
 		fileID = fm->findLeftOne();
 		fm->setBit(fileID, 0);
-		_openFile(name, fileID);
+		if (_openFile(name, fileID))
+			return false;
 		return true;
 	}
 	int newType() {

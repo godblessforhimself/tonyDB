@@ -4,6 +4,11 @@
 #include "../filesystem/utils/pagedef.h"
 #include <string.h>
 using namespace constSpace;
+/* 
+	RecordManager 创建、关闭文件，初始化、关闭RecordHandle
+	RecordHandle 读写记录
+	RecordScan 由RecordHandle生成，根据条件进行遍历
+*/
 class FileManager;
 struct BufPageManager;
 class RecordHandle;
@@ -17,8 +22,8 @@ struct FileHeader {
 	int bitmapSize;		// the size of bitmap
 	int recordStart;	// the offset of record
 	void debug() {
-		Debug::debug("FileHeader[rs %d, rn %d, pn %d, "
-			"next %d, bitmapStart %d, bitmapSize %d, recordStart %d]", \
+		Debug::debug("FileHeader[记录长度 %d, 记录数量上限 %d, 页数 %d, "
+			"下一页 %d, 位图偏移 %d, 位图字节数 %d, 记录偏移 %d]", \
 			recordSize, recordNum, pageNum, next, bitmapStart, bitmapSize, recordStart);
 	}
 };
@@ -63,6 +68,11 @@ public:
 			printf("%d", (c & (1 << i)) ? 1 : 0);
 		}
 	}
+	static bool getBitmap(char *bm, int offset) {
+		char value = *(bm + (offset >> 3));
+		return (value & (1 << (offset % 8)));
+	}
+
 	static bool getBitmap(BufType p, int bitmapStart, int slot) {
 		char states = *((char*)p + (bitmapStart + (slot >> 3)));
 		//Debug::debug("getBitmap [%d,%d] = ", slot, (slot >> 3));
@@ -99,6 +109,15 @@ public:
 		}
 		return -2;
 	}
+	static int getNext(int least, char *bm, bool used, int bmsize) {
+		// 获取下一个
+		cout << bmsize << endl;
+		for (int i = least + 1; i < bmsize; ++i) {
+			if (getBitmap(bm, i) == used)
+				return i;
+		}
+		return -1;
+	}
 	static int getUsedSlot(BufType p, int pslot, int bitmapStart, int bitmapSize) {
 		/* if 8bit is 0, */
 		char* bitmap = ((char*)p + bitmapStart);
@@ -131,37 +150,6 @@ public:
 		memcpy(dest, data, recordSize);
 	}
 };
-class Record {
-public:
-	Record() {
-		data = NULL;
-	}
-	~Record() {
-		if (data != NULL) 
-			delete[] data;
-	}
-	Record(RID rid, char* data, int recordSize) {
-		set(rid, data, recordSize);
-	}
-	void set(RID id, char* data, int recordSize) {
-		this->rid.copy(id);
-		if (this->data != NULL)
-			delete[] this->data;
-		this->data = new char[recordSize];
-		memcpy(this->data, data, recordSize);
-		this->recordSize = recordSize;
-	}
-	RID getRID() const{
-		return rid;
-	}
-	char* getData() const{
-		return data;
-	}
-private:
-	RID rid;
-	char* data;
-	int recordSize;
-};
 class RecordManager {
 public:
 	RecordManager(FileManager* fileManager, BufPageManager* bufPageManager);
@@ -178,14 +166,15 @@ private:
 class RecordHandle {
 public:
 	friend class RecordScan;
+	~RecordHandle();
 	int getRec(const RID &rid, Record& record);
 	int insertRec(const char *data, RID& rid);
 	bool deleteRec(const RID &rid);
 	bool updateRec(const Record &rec);
 	bool init(const BufType firstPage, int fileID);
+	void forceDisk();
 	void writeFH();
 	RecordHandle();
-	bool isValid();
 	int getFileID();
 	void setIndex(int index) {
 		this->index = index;
@@ -224,13 +213,13 @@ private:
 };
 class RecordScan {
 public:
-	RecordScan() {}
+	RecordScan() {value = NULL;}
 	~RecordScan();
-	int openScan(const RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value);
+	int openScan(RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value);
 	int getNextRec(Record& record);  
 	bool closeScan();
 private:
-	RecordHandle recordHandle;
+	RecordHandle *recordHandle;
 	constSpace::AttrType attrType;
 	int attrLength, attrOffset, scanPage, scanSlot, pageNum, slotNum, recordSize, bitmapStart, bitmapSize;
 	FileHeader fileHeader;
@@ -240,8 +229,6 @@ private:
 	void* value;
 	constSpace::CompOp compOp;
 	bool(*comparator)(void *, void *, constSpace::AttrType, int);
-	bool isValid;
 	int recordNum;
-	void moveAhead();
 };
 #endif

@@ -33,20 +33,19 @@ struct BTNode {
     BTNode(BufPageManager* bufPageManager);
     void withEmptyPage(BufType b, Head_Page headPage, int pID, int index);
     void withContentPage(BufType b, Head_Page headPage, int pID, int index);
-    static int comp(char* v1, char* v2);
-    static int comp(char* v1, const RID& r1, char* v2, const RID& r2);
+    void insertData(int rank, char* data, const RID& rid); // 拓展型
+    void setData(int rank, char* data, RID& rid); // 拓展型
+    static int comp(char* v1, char* v2); // 拓展型
+    static int comp(char* v1, const RID& r1, char* v2, const RID& r2); // 拓展型
+    int search(char* data, const RID& rid); // 拓展型
+    void getData(int rank, char* data, RID& rid) const; // 拓展型
+    void removeData(int rank, char* data, RID& rid); // 拓展型
     static int getParentRank(const BTNode&, const BTNode&);
-    int search(char* data, const RID& rid);
-    int search(char* data, const RID& rid, bool isLeaf);
     int getChild(int child) const;
     void setChild(int rank, int pageID);
-    void getData(int rank, char* data, RID& rid) const;
     int getNextData(int& rank, char* data, RID& rid) const;
-    void setData(int rank, char* data, RID& rid);
     void removeData(int rank);
-    void removeData(int rank, char* data, RID& rid);
     int removeChild(int rank);
-    void insertData(int rank, char* data, const RID& rid);
     void insertChild(int rank, int id);
     int getChildSize() const;
     int getDataSize() const;
@@ -76,9 +75,9 @@ class IX_IndexHandle {
     friend class IX_Manager;
     friend class IX_IndexScan;
     void writeHeader();
-    int search(char* e, const RID& rid); 
-    bool insert(char* e, const RID& rid);
-    bool remove(char* e, const RID& rid);
+    int search(char* e, const RID& rid); // 原型
+    bool insert(char* e, const RID& rid); // 原型
+    bool remove(char* e, const RID& rid); // 原型
     void init(int fileID, BufType b, IX_Manager* ix_manager);
     void traverse();
     void traverse(int pageID);
@@ -89,8 +88,9 @@ class IX_IndexHandle {
     IX_IndexHandle();                             // Constructor
     ~IX_IndexHandle();                             // Destructor
     int InsertEntry(void *pData, const RID &rid);  // Insert new index entry
+    int InsertNull(const RID &rid);
     int DeleteEntry(void *pData, const RID &rid);  // Delete index entry
-    int SearchEntry(void *pData, RID& rid, bool compare); // 搜索大于pData rid并更新
+    //int SearchEntry(void *pData, RID& rid, bool compare); // 搜索大于pData rid并更新
     int ForcePages();                             // Copy index to disk
     BTNode loadNode(int id);
     BTNode loadFirstLeaf();
@@ -109,7 +109,7 @@ private:
     BTNode createNode();
     void removeLeafLink(BTNode& node);
     void addLeafLinkAfter(BTNode& node_v, BTNode& node_after);
-    int searchEntryRecur(int v, void *pData, RID& rid);
+    //int searchEntryRecur(int v, void *pData, RID& rid);
     void removeLink(const BTNode& node);
     void addLink(const BTNode& node);
 };
@@ -118,15 +118,15 @@ private:
     void* value, *current_value;
     RID current_RID;
     int rank;
-    AttrType attrType; CompOp compOp; int attrLength, numScanned;
-    bool reverse;
+    AttrType attrType; CompOp compOp; 
+    int attrLength, numScanned;
     bool(*comparator)(void *, void *, AttrType, int);
     IX_IndexHandle* indexHandle;
     BTNode node_current;
 public:
 	IX_IndexScan();                                 // Constructor
     ~IX_IndexScan();                                 // Destructor
-    int OpenScan(IX_IndexHandle &indexHandle, CompOp compOp, void *value);           
+    int OpenScan(IX_IndexHandle &indexHandle, CompOp compOp, void *value);   // value = NULL 时， compOp只能为EQ NE        
     int GetNextEntry(RID &rid);                         // Get next matching entry
     int CloseScan();                                 // Terminate index scan
     int tryLoadNext(BTNode& node, int& rank, char* data, RID& rid);

@@ -1,0 +1,129 @@
+/* A Bison parser, made by GNU Bison 2.3.  */
+
+/* Skeleton interface for Bison's Yacc-like parsers in C
+
+   Copyright (C) 1984, 1989, 1990, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Free Software Foundation, Inc.
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2, or (at your option)
+   any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
+
+/* As a special exception, you may create a larger work that contains
+   part or all of the Bison parser skeleton and distribute that work
+   under terms of your choice, so long as that work isn't itself a
+   parser generator using the skeleton or a modified version thereof
+   as a parser skeleton.  Alternatively, if you modify or redistribute
+   the parser skeleton itself, you may (at your option) remove this
+   special exception, which will cause the skeleton and the resulting
+   Bison output files to be licensed under the GNU General Public
+   License without this special exception.
+
+   This special exception was added by the Free Software Foundation in
+   version 2.2 of Bison.  */
+
+/* Tokens.  */
+#ifndef YYTOKENTYPE
+# define YYTOKENTYPE
+   /* Put the tokens into the symbol table, so that GDB and other debuggers
+      know about them.  */
+   enum yytokentype {
+     TOKEN_CREATE = 258,
+     TOKEN_DATABASE = 259,
+     TOKEN_DATABASES = 260,
+     TOKEN_DROP = 261,
+     TOKEN_USE = 262,
+     TOKEN_SHOW = 263,
+     TOKEN_TABLE = 264,
+     TOKEN_TABLES = 265,
+     TOKEN_NOT = 266,
+     TOKEN_NULL = 267,
+     TOKEN_KEY = 268,
+     TOKEN_PRIMARY = 269,
+     TOKEN_INTO = 270,
+     TOKEN_INSERT = 271,
+     TOKEN_VALUES = 272,
+     TOKEN_DELETE = 273,
+     TOKEN_FROM = 274,
+     TOKEN_WHERE = 275,
+     TOKEN_UPDATE = 276,
+     TOKEN_SET = 277,
+     TOKEN_SELECT = 278,
+     TOKEN_IS = 279,
+     TOKEN_INT = 280,
+     TOKEN_VARCHAR = 281,
+     TOKEN_DESC = 282,
+     TOKEN_INDEX = 283,
+     TOKEN_AND = 284,
+     TOKEN_DATE = 285,
+     TOKEN_FLOAT = 286,
+     TOKEN_FOREIGN = 287,
+     TOKEN_REFERENCES = 288,
+     TOKEN_STRING_IDENTIFIER = 289
+   };
+#endif
+/* Tokens.  */
+#define TOKEN_CREATE 258
+#define TOKEN_DATABASE 259
+#define TOKEN_DATABASES 260
+#define TOKEN_DROP 261
+#define TOKEN_USE 262
+#define TOKEN_SHOW 263
+#define TOKEN_TABLE 264
+#define TOKEN_TABLES 265
+#define TOKEN_NOT 266
+#define TOKEN_NULL 267
+#define TOKEN_KEY 268
+#define TOKEN_PRIMARY 269
+#define TOKEN_INTO 270
+#define TOKEN_INSERT 271
+#define TOKEN_VALUES 272
+#define TOKEN_DELETE 273
+#define TOKEN_FROM 274
+#define TOKEN_WHERE 275
+#define TOKEN_UPDATE 276
+#define TOKEN_SET 277
+#define TOKEN_SELECT 278
+#define TOKEN_IS 279
+#define TOKEN_INT 280
+#define TOKEN_VARCHAR 281
+#define TOKEN_DESC 282
+#define TOKEN_INDEX 283
+#define TOKEN_AND 284
+#define TOKEN_DATE 285
+#define TOKEN_FLOAT 286
+#define TOKEN_FOREIGN 287
+#define TOKEN_REFERENCES 288
+#define TOKEN_STRING_IDENTIFIER 289
+
+
+
+
+#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
+typedef union YYSTYPE
+#line 44 "parser/parser.y"
+{
+    int ival;
+    char* sval;
+}
+/* Line 1529 of yacc.c.  */
+#line 122 "parser/y.tab"
+	YYSTYPE;
+# define yystype YYSTYPE /* obsolescent; will be withdrawn */
+# define YYSTYPE_IS_DECLARED 1
+# define YYSTYPE_IS_TRIVIAL 1
+#endif
+
+extern YYSTYPE yylval;
+

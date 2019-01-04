@@ -1,5 +1,37 @@
 #include "const.h"
 using namespace constSpace;
+bool (*constSpace::getComparator(CompOp op))(void*, void*, AttrType, int) {
+	switch (op) {
+		case EQ_OP:
+			return &constSpace::equal;
+		case LT_OP:
+			return &constSpace::less_than;
+		case LE_OP:
+			return &constSpace::less_than_or_eq_to;
+		case GT_OP:
+			return &constSpace::greater_than;
+		case GE_OP:
+			return &constSpace::greater_than_or_eq_to;
+		case NE_OP:
+			return &constSpace::not_equal;
+		default:
+			return NULL;
+	}
+	return NULL;
+}
+bool constSpace::twoTypeMatch(AttrType a, ValueType b) {
+	if (b == v_null)
+		return true;
+	if (a == INT && b == v_int)
+		return true;
+	if (a == STRING && b == v_string)
+		return true;
+	if (a == FLOAT && b == v_float)
+		return true;
+	if (a == DATE && b == v_date)
+		return true;
+	return false;
+}
 bool constSpace::equal(void* value1, void* value2, constSpace::AttrType attrtype, int attrLength) {
 	switch (attrtype) {
 	    case constSpace::FLOAT: return (*(float*)value1 == *(float*)value2);
@@ -42,6 +74,24 @@ bool constSpace::not_equal(void * value1, void * value2, constSpace::AttrType at
     	default: return (strncmp((char *) value1, (char *) value2, attrLength) != 0);
   }
 }
+CompOp constSpace::getopByfunc(bool (*f)(void*, void*, AttrType, int)) {
+	if (f == NULL) {
+		return NO_OP;
+	}
+	if (f == &constSpace::equal) 
+		return EQ_OP;
+	if (f == &constSpace::not_equal)
+		return NE_OP;
+	if (f == &constSpace::less_than)
+		return LT_OP;
+	if (f == &constSpace::less_than_or_eq_to)
+		return LE_OP;
+	if (f == &constSpace::greater_than)
+		return GT_OP;
+	if (f == &constSpace::greater_than_or_eq_to)
+		return GE_OP;
+	return NO_OP;
+}
 int constSpace::getattrlength(AttrType a) {
 	switch (a) {
 		case AttrType::INT:
@@ -52,8 +102,10 @@ int constSpace::getattrlength(AttrType a) {
 			return 4;
 		case STRING:
 			return 0;
-		return 0;
+		case INVALID:
+			return 0;
 	}
+	return 0;
 }
 Printer::Printer() {
 
@@ -67,26 +119,45 @@ void Printer::printRelation(ostream &c, constSpace::RelationEntry* entry) {
 void Printer::printAttribute(ostream &c, constSpace::AttributeEntry* entry) {
 	char type[16];
 	constSpace::transAttrType(entry->attrType, type);
-	c << "[" << entry->attrName << "," << entry->offset << "," << type << "," << entry->attrLenth << "," << entry->indexNo << endl;
+	c << entry->attrName << "," << type << "," << entry->attrLenth << "," << entry->notNull << "," << entry->useForeignkey << "," << entry->isPrimarykey << endl;;
 }
-void constSpace::transAttrType(AttrType type, char* dst)
-{
+void constSpace::transAttrType(AttrType type, char* dst) {
 	switch (type) {
 		case INT:
-			strcpy(dst, "int");
+			strcpy(dst, attr_int);
 			return;
 		case FLOAT:
-			strcpy(dst, "float");
+			strcpy(dst, attr_float);
 			return;
 		case STRING:
-			strcpy(dst, "string");
+			strcpy(dst, attr_string);
+			return;
+		case DATE:
+			strcpy(dst, attr_date);
 			return;
 		case INVALID:
-			strcpy(dst, "invalid");
+			strcpy(dst, attr_invalid);
 			return;
 	}
 }
-void parser_node::set_attr_type(AttrType* type, int len) {
+AttrType constSpace::getAttrType(char *src) {
+	if (strcmp(src, attr_int) == 0) {
+        return AttrType::INT;
+    } else if (strcmp(src, attr_float) == 0) {
+        return FLOAT;
+    } else if (strcmp(src, attr_string) == 0) {
+        return STRING;
+    } else if (strcmp(src, attr_date) == 0) {
+		return DATE;
+	} else {
+        return INVALID;
+    }
+}
+void parser_node::set_selector(parser_node *a) {
+	nType = N_SELECTOR;
+	u.Selector.colList = a;
+}
+void parser_node::set_attr_type(AttrType type, int len) {
 	nType = N_ATTRTYPE;
 	u.ATTRTYPE.type = type;
 	u.ATTRTYPE.len = len;
@@ -103,25 +174,20 @@ void parser_node::set_field_notnull(char* a, parser_node* b) {
 	u.Field.v.normal.colname = a;
 	u.Field.v.normal.type = b;
 }
-void parser_node::init_field_list() {
-	nType = N_FIELD_LIST;
-	u.FieldList.len = 0;
-}
-void parser_node::field_list_append(parser_node* a) {
-	if (u.FieldList.len >= MAX_LIST_LENGTH) {
-		printf("error!parser_node::field_list_append\n");
-	}
-	u.FieldList.fList[u.FieldList.len++] = a;
-}
-void parser_node::init_string_list() {
+void parser_node::init_string_list(char *a) {
 	nType = N_STRING_LIST;
-	u.StringList.len = 0;
+	u.StringList.string = a;
+	u.StringList.next = u.StringList.tail = NULL;
 }
-void parser_node::append_string_list(char *a) {
-	if (u.StringList.len >= MAX_LIST_LENGTH) {
-		printf("error!parser_node::append_string_list\n");
+void parser_node::append_string_list(char *a, parser_node *b) {
+	b->init_string_list(a);
+	if (u.StringList.next == NULL) {
+		u.StringList.next = u.StringList.tail = b;
+	} else {
+		parser_node *&tail = u.StringList.tail;
+		tail->u.StringList.next = b;
+		tail = b;
 	}
-	u.StringList.stringlist[u.StringList.len++] = a;
 }
 void parser_node::set_field_foreign_key(char* loc, char* ftable, char *fname) {
 	nType = N_FIELD;
@@ -130,61 +196,142 @@ void parser_node::set_field_foreign_key(char* loc, char* ftable, char *fname) {
 	u.Field.v.foreignkey.foreigntable = ftable;
 	u.Field.v.foreignkey.foreignname = fname;
 }
-void parser_node::set_field_primary_list() {
-	nType = N_FIELD_PRIMARY_KEY_LIST;
-}
 void parser_node::printStringList(ostream &o) {
-	for (int i = 0; i < u.StringList.len; ++i) {
-		o << i << ": " << u.StringList.stringlist[i] << endl;
+	parser_node *current = this;
+	while (current != NULL) {
+		o << current->u.StringList.string << endl;
+		current = current->u.StringList.next;
 	}
 }
-void parser_node::print(ostream& o) {
-	switch (nType) {
-		case N_ATTRTYPE:
-			switch (*u.ATTRTYPE.type) {
-				case INT:
-					o << "int " << u.ATTRTYPE.len << endl;
-					break;
-				case FLOAT:
-					o << "float " << u.ATTRTYPE.len << endl;
-					break;
-				case STRING:
-					o << "string " << u.ATTRTYPE.len << endl;
-					break;
-				case DATE:
-					o << "date " << u.ATTRTYPE.len << endl;
-					break;
-				default:
-					o << "default " << u.ATTRTYPE.len << endl;
-					break;
-			}
-			break;
-		case N_FIELD:
-			switch (u.Field.ftype) {
-				case f_normal:
-					o << "普通域: " << u.Field.v.normal.colname << ",";
-					u.Field.v.normal.type->print(o);
-					break;
-				case f_notnull:
-					o << "非空域: " << u.Field.v.notnull.colname << ",";
-					u.Field.v.notnull.type->print(o);
-					break;
-				case f_foreign_key:
-					o << "外键约束: " << u.Field.v.foreignkey.localname << "," << u.Field.v.foreignkey.foreigntable << "," << u.Field.v.foreignkey.foreignname << endl;
-					break;
-			}
-			break;
-		case N_FIELD_PRIMARY_KEY_LIST:
-			o << "主键约束:" << endl;
-			printStringList(o);
-			break;
-		case N_FIELD_LIST:
-			o << "fieldList 长度" << u.FieldList.len << "\n";
-			for (int i = 0; i < u.FieldList.len; ++i) {
-				u.FieldList.fList[i]->print(o);
-			}
-			break;
-		default:
-			o << "this should assert\n";
+void parser_node::set_col(char *tb, char *col) {
+	nType = N_COL;
+	u.Col.tbName = tb;
+	u.Col.colName = col;
+}
+void parser_node::col_or_value(parser_node *c, parser_node *v) {
+	nType = N_COL_OR_VALUE;
+	u.ColOrValue.col = c;
+	u.ColOrValue.value = v;
+}
+void parser_node::set_normal_condition(parser_node *l, CompOp o, parser_node *r) {
+	nType = N_CONDITION;
+	u.Condition.lh = l;
+	u.Condition.op = o;
+	u.Condition.expr = r;
+}
+void parser_node::set_null_cond(parser_node *l) {
+	nType = N_IS_NULL_COND;
+	u.IsNullCond.lh = l;
+}
+void parser_node::set_notnull_cond(parser_node *l) {
+	nType = N_NOT_NULL_COND;
+	u.NotNullCond.lh = l;
+}
+void parser_node::set_value() {
+	nType = N_VALUE;
+	u.Value.vtype = v_null;
+}
+void parser_node::set_value(int a) {
+	nType = N_VALUE;
+	u.Value.vtype = v_int;
+	u.Value.value.integer = a;
+}
+void parser_node::set_value(char* a) {
+	nType = N_VALUE;
+	u.Value.vtype = v_string;
+	u.Value.value.string = a;
+}
+void parser_node::init_value_list(parser_node *value) {
+	nType = N_VALUE_LIST;
+	u.ValueList.value = value;
+	u.ValueList.next = u.ValueList.tail = NULL;
+}
+void parser_node::append_value_list(parser_node *value, parser_node *newptr) {
+	newptr->u.ValueList.value = value;
+	newptr->u.ValueList.next = newptr->u.ValueList.tail = NULL;
+	if (u.ValueList.next == NULL) {
+		u.ValueList.next = u.ValueList.tail = newptr;
+	} else {
+		parser_node *&tail = u.ValueList.tail;
+		tail->u.ValueList.next = newptr;
+		tail = newptr;
 	}
+}
+void parser_node::single_set(char *a, parser_node *b) {
+	nType = N_SET;
+	u.SingleSet.colName = a;
+	u.SingleSet.value = b;
+}
+void parser_node::init_list(parser_node *value) {
+	nType = N_LIST;
+	u.List.value = value;
+	u.List.next = u.List.tail = NULL;
+}
+void parser_node::append_list(parser_node *value, parser_node *newptr) {
+	newptr->init_list(value);
+	if (u.List.next == NULL) {
+		u.List.next = u.List.tail = newptr;
+	} else {
+		parser_node *&tail = u.List.tail;
+		tail->u.List.next = newptr;
+		tail = newptr;
+	}
+}
+void parser_node::init_value_lists(parser_node *value) {
+	nType = N_VALUE_LISTS;
+	u.ValueLists.value = value;
+	u.ValueLists.next = u.ValueLists.tail = NULL;
+}
+void parser_node::append_value_lists(parser_node *value, parser_node *newptr) {
+	newptr->u.ValueLists.value = value;
+	newptr->u.ValueLists.next = newptr->u.ValueLists.tail = NULL;
+	if (u.ValueLists.next == NULL) {
+		u.ValueLists.next = u.ValueLists.tail = newptr;
+	} else {
+		parser_node *&tail = u.ValueLists.tail;
+		tail->u.ValueLists.next = newptr;
+		tail = newptr;
+	}
+}
+void parser_node::printValue(ostream &o) {
+	assert(nType == N_VALUE);
+	switch (u.Value.vtype) {
+		case v_null:
+			o << "null";
+			break;
+		case v_string:
+			o << u.Value.value.string;
+			break;
+		case v_int:
+			o << u.Value.value.integer;
+			break;
+	}
+}
+void parser_node::printValueList(ostream &o) {
+	assert(nType == N_VALUE_LIST);
+	parser_node *current = this, *value;
+	while (current != NULL) {
+		if (current != this)
+			o << ", ";
+		value = current->u.ValueList.value;
+		value->printValue(o);
+		current = current->u.ValueList.next;
+	}
+}
+void setBitmap(int position, void* dst, int value) {
+	assert(value == 0 || value == 1);
+	int bigpos = position >> 3;
+	int offset = position % 8;
+	char *that = (char*)dst + bigpos;
+	if (value == 1) {
+		*that |= (1 << offset);
+	} else {
+		*that &= ~(1 << offset);
+	}
+}
+int getBitmap(int position, void* src) {
+	int bigpos = position >> 3;
+	int offset = position % 8;
+	char that = *((char*)src + bigpos);
+	return (that & (1 << offset));
 }

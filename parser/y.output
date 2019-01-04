@@ -1,0 +1,1452 @@
+Grammar
+
+    0 $accept: program $end
+
+    1 program: stmt
+    2        | SYS_COMMAND
+
+    3 stmt: sysStmt ';'
+    4     | dbStmt ';'
+    5     | tbStmt ';'
+    6     | idxStmt ';'
+
+    7 sysStmt: TOKEN_SHOW TOKEN_DATABASES
+
+    8 dbStmt: TOKEN_CREATE TOKEN_DATABASE dbName
+    9       | TOKEN_DROP TOKEN_DATABASE dbName
+   10       | TOKEN_USE dbName
+   11       | TOKEN_SHOW TOKEN_TABLES
+
+   12 tbStmt: TOKEN_DROP TOKEN_TABLE tbName
+   13       | TOKEN_CREATE TOKEN_TABLE tbName '(' fieldList ')'
+   14       | TOKEN_DESC tbName
+   15       | TOKEN_INSERT TOKEN_INTO tbName TOKEN_VALUES valueLists
+   16       | TOKEN_DELETE TOKEN_FROM tbName TOKEN_WHERE whereClause
+   17       | TOKEN_UPDATE tbName TOKEN_SET setClause TOKEN_WHERE whereClause
+   18       | TOKEN_SELECT selector TOKEN_FROM tableList TOKEN_WHERE whereClause
+
+   19 idxStmt: TOKEN_CREATE TOKEN_INDEX tbName '(' colName ')'
+   20        | TOKEN_DROP TOKEN_INDEX tbName '(' colName ')'
+
+   21 fieldList: field
+   22          | fieldList ',' field
+
+   23 field: colName type
+   24      | colName type TOKEN_NOT TOKEN_NULL
+   25      | TOKEN_PRIMARY TOKEN_KEY '(' columnList ')'
+   26      | TOKEN_FOREIGN TOKEN_KEY '(' colName ')' TOKEN_REFERENCES tbName '(' colName ')'
+
+   27 selector: '*'
+   28         | columnList
+
+   29 tableList: tbName
+   30          | tableList ',' tbName
+
+   31 columnList: colName
+   32           | columnList ',' colName
+
+   33 type: TOKEN_INT '(' VALUE_INT ')'
+   34     | TOKEN_VARCHAR '(' VALUE_INT ')'
+   35     | TOKEN_DATE
+   36     | TOKEN_FLOAT
+
+   37 value: VALUE_INT
+   38      | VALUE_STRING
+   39      | TOKEN_NULL
+
+   40 valueList: value
+   41          | valueList ',' value
+
+   42 valueLists: '(' valueList ')'
+   43           | valueLists ',' '(' valueList ')'
+
+   44 setClause: colName '=' value
+   45          | setClause ',' colName '=' value
+
+   46 whereClause: condition
+   47            | whereClause TOKEN_AND condition
+
+   48 condition: col op expr
+   49          | col TOKEN_IS TOKEN_NULL
+   50          | col TOKEN_IS TOKEN_NOT TOKEN_NULL
+
+   51 col: colName
+   52    | tbName '.' colName
+
+   53 expr: col
+   54     | value
+
+   55 op: OP_LT
+   56   | OP_LE
+   57   | OP_GT
+   58   | OP_GE
+   59   | OP_EQ
+   60   | OP_NE
+
+   61 dbName: TOKEN_STRING_IDENTIFIER
+
+   62 tbName: TOKEN_STRING_IDENTIFIER
+
+   63 colName: TOKEN_STRING_IDENTIFIER
+
+
+Terminals, with rules where they appear
+
+$end (0) 0
+'(' (40) 13 19 20 25 26 33 34 42 43
+')' (41) 13 19 20 25 26 33 34 42 43
+'*' (42) 27
+',' (44) 22 30 32 41 43 45
+'.' (46) 52
+';' (59) 3 4 5 6
+'=' (61) 44 45
+error (256)
+TOKEN_CREATE (258) 8 13 19
+TOKEN_DATABASE (259) 8 9
+TOKEN_DATABASES (260) 7
+TOKEN_DROP (261) 9 12 20
+TOKEN_USE (262) 10
+TOKEN_SHOW (263) 7 11
+TOKEN_TABLE (264) 12 13
+TOKEN_TABLES (265) 11
+TOKEN_NOT (266) 24 50
+TOKEN_NULL (267) 24 39 49 50
+TOKEN_KEY (268) 25 26
+TOKEN_PRIMARY (269) 25
+TOKEN_INTO (270) 15
+TOKEN_INSERT (271) 15
+TOKEN_VALUES (272) 15
+TOKEN_DELETE (273) 16
+TOKEN_FROM (274) 16 18
+TOKEN_WHERE (275) 16 17 18
+TOKEN_UPDATE (276) 17
+TOKEN_SET (277) 17
+TOKEN_SELECT (278) 18
+TOKEN_IS (279) 49 50
+TOKEN_INT (280) 33
+TOKEN_VARCHAR (281) 34
+TOKEN_DESC (282) 14
+TOKEN_INDEX (283) 19 20
+TOKEN_AND (284) 47
+TOKEN_DATE (285) 35
+TOKEN_FLOAT (286) 36
+TOKEN_FOREIGN (287) 26
+TOKEN_REFERENCES (288) 26
+OP_LT (289) 55
+OP_LE (290) 56
+OP_GT (291) 57
+OP_GE (292) 58
+OP_EQ (293) 59
+OP_NE (294) 60
+TOKEN_STRING_IDENTIFIER (295) 61 62 63
+SYS_COMMAND (296) 2
+VALUE_STRING (297) 38
+VALUE_INT (298) 33 34 37
+
+
+Nonterminals, with rules where they appear
+
+$accept (51)
+    on left: 0
+program (52)
+    on left: 1 2, on right: 0
+stmt (53)
+    on left: 3 4 5 6, on right: 1
+sysStmt (54)
+    on left: 7, on right: 3
+dbStmt (55)
+    on left: 8 9 10 11, on right: 4
+tbStmt (56)
+    on left: 12 13 14 15 16 17 18, on right: 5
+idxStmt (57)
+    on left: 19 20, on right: 6
+fieldList (58)
+    on left: 21 22, on right: 13 22
+field (59)
+    on left: 23 24 25 26, on right: 21 22
+selector (60)
+    on left: 27 28, on right: 18
+tableList (61)
+    on left: 29 30, on right: 18 30
+columnList (62)
+    on left: 31 32, on right: 25 28 32
+type (63)
+    on left: 33 34 35 36, on right: 23 24
+value (64)
+    on left: 37 38 39, on right: 40 41 44 45 54
+valueList (65)
+    on left: 40 41, on right: 41 42 43
+valueLists (66)
+    on left: 42 43, on right: 15 43
+setClause (67)
+    on left: 44 45, on right: 17 45
+whereClause (68)
+    on left: 46 47, on right: 16 17 18 47
+condition (69)
+    on left: 48 49 50, on right: 46 47
+col (70)
+    on left: 51 52, on right: 48 49 50 53
+expr (71)
+    on left: 53 54, on right: 48
+op (72)
+    on left: 55 56 57 58 59 60, on right: 48
+dbName (73)
+    on left: 61, on right: 8 9 10
+tbName (74)
+    on left: 62, on right: 12 13 14 15 16 17 19 20 26 29 30 52
+colName (75)
+    on left: 63, on right: 19 20 23 24 26 31 32 44 45 51 52
+
+
+state 0
+
+    0 $accept: . program $end
+
+    TOKEN_CREATE  shift, and go to state 1
+    TOKEN_DROP    shift, and go to state 2
+    TOKEN_USE     shift, and go to state 3
+    TOKEN_SHOW    shift, and go to state 4
+    TOKEN_INSERT  shift, and go to state 5
+    TOKEN_DELETE  shift, and go to state 6
+    TOKEN_UPDATE  shift, and go to state 7
+    TOKEN_SELECT  shift, and go to state 8
+    TOKEN_DESC    shift, and go to state 9
+    SYS_COMMAND   shift, and go to state 10
+
+    program  go to state 11
+    stmt     go to state 12
+    sysStmt  go to state 13
+    dbStmt   go to state 14
+    tbStmt   go to state 15
+    idxStmt  go to state 16
+
+
+state 1
+
+    8 dbStmt: TOKEN_CREATE . TOKEN_DATABASE dbName
+   13 tbStmt: TOKEN_CREATE . TOKEN_TABLE tbName '(' fieldList ')'
+   19 idxStmt: TOKEN_CREATE . TOKEN_INDEX tbName '(' colName ')'
+
+    TOKEN_DATABASE  shift, and go to state 17
+    TOKEN_TABLE     shift, and go to state 18
+    TOKEN_INDEX     shift, and go to state 19
+
+
+state 2
+
+    9 dbStmt: TOKEN_DROP . TOKEN_DATABASE dbName
+   12 tbStmt: TOKEN_DROP . TOKEN_TABLE tbName
+   20 idxStmt: TOKEN_DROP . TOKEN_INDEX tbName '(' colName ')'
+
+    TOKEN_DATABASE  shift, and go to state 20
+    TOKEN_TABLE     shift, and go to state 21
+    TOKEN_INDEX     shift, and go to state 22
+
+
+state 3
+
+   10 dbStmt: TOKEN_USE . dbName
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 23
+
+    dbName  go to state 24
+
+
+state 4
+
+    7 sysStmt: TOKEN_SHOW . TOKEN_DATABASES
+   11 dbStmt: TOKEN_SHOW . TOKEN_TABLES
+
+    TOKEN_DATABASES  shift, and go to state 25
+    TOKEN_TABLES     shift, and go to state 26
+
+
+state 5
+
+   15 tbStmt: TOKEN_INSERT . TOKEN_INTO tbName TOKEN_VALUES valueLists
+
+    TOKEN_INTO  shift, and go to state 27
+
+
+state 6
+
+   16 tbStmt: TOKEN_DELETE . TOKEN_FROM tbName TOKEN_WHERE whereClause
+
+    TOKEN_FROM  shift, and go to state 28
+
+
+state 7
+
+   17 tbStmt: TOKEN_UPDATE . tbName TOKEN_SET setClause TOKEN_WHERE whereClause
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 30
+
+
+state 8
+
+   18 tbStmt: TOKEN_SELECT . selector TOKEN_FROM tableList TOKEN_WHERE whereClause
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+    '*'                      shift, and go to state 32
+
+    selector    go to state 33
+    columnList  go to state 34
+    colName     go to state 35
+
+
+state 9
+
+   14 tbStmt: TOKEN_DESC . tbName
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 36
+
+
+state 10
+
+    2 program: SYS_COMMAND .
+
+    $default  reduce using rule 2 (program)
+
+
+state 11
+
+    0 $accept: program . $end
+
+    $end  shift, and go to state 37
+
+
+state 12
+
+    1 program: stmt .
+
+    $default  reduce using rule 1 (program)
+
+
+state 13
+
+    3 stmt: sysStmt . ';'
+
+    ';'  shift, and go to state 38
+
+
+state 14
+
+    4 stmt: dbStmt . ';'
+
+    ';'  shift, and go to state 39
+
+
+state 15
+
+    5 stmt: tbStmt . ';'
+
+    ';'  shift, and go to state 40
+
+
+state 16
+
+    6 stmt: idxStmt . ';'
+
+    ';'  shift, and go to state 41
+
+
+state 17
+
+    8 dbStmt: TOKEN_CREATE TOKEN_DATABASE . dbName
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 23
+
+    dbName  go to state 42
+
+
+state 18
+
+   13 tbStmt: TOKEN_CREATE TOKEN_TABLE . tbName '(' fieldList ')'
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 43
+
+
+state 19
+
+   19 idxStmt: TOKEN_CREATE TOKEN_INDEX . tbName '(' colName ')'
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 44
+
+
+state 20
+
+    9 dbStmt: TOKEN_DROP TOKEN_DATABASE . dbName
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 23
+
+    dbName  go to state 45
+
+
+state 21
+
+   12 tbStmt: TOKEN_DROP TOKEN_TABLE . tbName
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 46
+
+
+state 22
+
+   20 idxStmt: TOKEN_DROP TOKEN_INDEX . tbName '(' colName ')'
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 47
+
+
+state 23
+
+   61 dbName: TOKEN_STRING_IDENTIFIER .
+
+    $default  reduce using rule 61 (dbName)
+
+
+state 24
+
+   10 dbStmt: TOKEN_USE dbName .
+
+    $default  reduce using rule 10 (dbStmt)
+
+
+state 25
+
+    7 sysStmt: TOKEN_SHOW TOKEN_DATABASES .
+
+    $default  reduce using rule 7 (sysStmt)
+
+
+state 26
+
+   11 dbStmt: TOKEN_SHOW TOKEN_TABLES .
+
+    $default  reduce using rule 11 (dbStmt)
+
+
+state 27
+
+   15 tbStmt: TOKEN_INSERT TOKEN_INTO . tbName TOKEN_VALUES valueLists
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 48
+
+
+state 28
+
+   16 tbStmt: TOKEN_DELETE TOKEN_FROM . tbName TOKEN_WHERE whereClause
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 49
+
+
+state 29
+
+   62 tbName: TOKEN_STRING_IDENTIFIER .
+
+    $default  reduce using rule 62 (tbName)
+
+
+state 30
+
+   17 tbStmt: TOKEN_UPDATE tbName . TOKEN_SET setClause TOKEN_WHERE whereClause
+
+    TOKEN_SET  shift, and go to state 50
+
+
+state 31
+
+   63 colName: TOKEN_STRING_IDENTIFIER .
+
+    $default  reduce using rule 63 (colName)
+
+
+state 32
+
+   27 selector: '*' .
+
+    $default  reduce using rule 27 (selector)
+
+
+state 33
+
+   18 tbStmt: TOKEN_SELECT selector . TOKEN_FROM tableList TOKEN_WHERE whereClause
+
+    TOKEN_FROM  shift, and go to state 51
+
+
+state 34
+
+   28 selector: columnList .
+   32 columnList: columnList . ',' colName
+
+    ','  shift, and go to state 52
+
+    $default  reduce using rule 28 (selector)
+
+
+state 35
+
+   31 columnList: colName .
+
+    $default  reduce using rule 31 (columnList)
+
+
+state 36
+
+   14 tbStmt: TOKEN_DESC tbName .
+
+    $default  reduce using rule 14 (tbStmt)
+
+
+state 37
+
+    0 $accept: program $end .
+
+    $default  accept
+
+
+state 38
+
+    3 stmt: sysStmt ';' .
+
+    $default  reduce using rule 3 (stmt)
+
+
+state 39
+
+    4 stmt: dbStmt ';' .
+
+    $default  reduce using rule 4 (stmt)
+
+
+state 40
+
+    5 stmt: tbStmt ';' .
+
+    $default  reduce using rule 5 (stmt)
+
+
+state 41
+
+    6 stmt: idxStmt ';' .
+
+    $default  reduce using rule 6 (stmt)
+
+
+state 42
+
+    8 dbStmt: TOKEN_CREATE TOKEN_DATABASE dbName .
+
+    $default  reduce using rule 8 (dbStmt)
+
+
+state 43
+
+   13 tbStmt: TOKEN_CREATE TOKEN_TABLE tbName . '(' fieldList ')'
+
+    '('  shift, and go to state 53
+
+
+state 44
+
+   19 idxStmt: TOKEN_CREATE TOKEN_INDEX tbName . '(' colName ')'
+
+    '('  shift, and go to state 54
+
+
+state 45
+
+    9 dbStmt: TOKEN_DROP TOKEN_DATABASE dbName .
+
+    $default  reduce using rule 9 (dbStmt)
+
+
+state 46
+
+   12 tbStmt: TOKEN_DROP TOKEN_TABLE tbName .
+
+    $default  reduce using rule 12 (tbStmt)
+
+
+state 47
+
+   20 idxStmt: TOKEN_DROP TOKEN_INDEX tbName . '(' colName ')'
+
+    '('  shift, and go to state 55
+
+
+state 48
+
+   15 tbStmt: TOKEN_INSERT TOKEN_INTO tbName . TOKEN_VALUES valueLists
+
+    TOKEN_VALUES  shift, and go to state 56
+
+
+state 49
+
+   16 tbStmt: TOKEN_DELETE TOKEN_FROM tbName . TOKEN_WHERE whereClause
+
+    TOKEN_WHERE  shift, and go to state 57
+
+
+state 50
+
+   17 tbStmt: TOKEN_UPDATE tbName TOKEN_SET . setClause TOKEN_WHERE whereClause
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    setClause  go to state 58
+    colName    go to state 59
+
+
+state 51
+
+   18 tbStmt: TOKEN_SELECT selector TOKEN_FROM . tableList TOKEN_WHERE whereClause
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tableList  go to state 60
+    tbName     go to state 61
+
+
+state 52
+
+   32 columnList: columnList ',' . colName
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    colName  go to state 62
+
+
+state 53
+
+   13 tbStmt: TOKEN_CREATE TOKEN_TABLE tbName '(' . fieldList ')'
+
+    TOKEN_PRIMARY            shift, and go to state 63
+    TOKEN_FOREIGN            shift, and go to state 64
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    fieldList  go to state 65
+    field      go to state 66
+    colName    go to state 67
+
+
+state 54
+
+   19 idxStmt: TOKEN_CREATE TOKEN_INDEX tbName '(' . colName ')'
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    colName  go to state 68
+
+
+state 55
+
+   20 idxStmt: TOKEN_DROP TOKEN_INDEX tbName '(' . colName ')'
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    colName  go to state 69
+
+
+state 56
+
+   15 tbStmt: TOKEN_INSERT TOKEN_INTO tbName TOKEN_VALUES . valueLists
+
+    '('  shift, and go to state 70
+
+    valueLists  go to state 71
+
+
+state 57
+
+   16 tbStmt: TOKEN_DELETE TOKEN_FROM tbName TOKEN_WHERE . whereClause
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 72
+
+    whereClause  go to state 73
+    condition    go to state 74
+    col          go to state 75
+    tbName       go to state 76
+    colName      go to state 77
+
+
+state 58
+
+   17 tbStmt: TOKEN_UPDATE tbName TOKEN_SET setClause . TOKEN_WHERE whereClause
+   45 setClause: setClause . ',' colName '=' value
+
+    TOKEN_WHERE  shift, and go to state 78
+    ','          shift, and go to state 79
+
+
+state 59
+
+   44 setClause: colName . '=' value
+
+    '='  shift, and go to state 80
+
+
+state 60
+
+   18 tbStmt: TOKEN_SELECT selector TOKEN_FROM tableList . TOKEN_WHERE whereClause
+   30 tableList: tableList . ',' tbName
+
+    TOKEN_WHERE  shift, and go to state 81
+    ','          shift, and go to state 82
+
+
+state 61
+
+   29 tableList: tbName .
+
+    $default  reduce using rule 29 (tableList)
+
+
+state 62
+
+   32 columnList: columnList ',' colName .
+
+    $default  reduce using rule 32 (columnList)
+
+
+state 63
+
+   25 field: TOKEN_PRIMARY . TOKEN_KEY '(' columnList ')'
+
+    TOKEN_KEY  shift, and go to state 83
+
+
+state 64
+
+   26 field: TOKEN_FOREIGN . TOKEN_KEY '(' colName ')' TOKEN_REFERENCES tbName '(' colName ')'
+
+    TOKEN_KEY  shift, and go to state 84
+
+
+state 65
+
+   13 tbStmt: TOKEN_CREATE TOKEN_TABLE tbName '(' fieldList . ')'
+   22 fieldList: fieldList . ',' field
+
+    ')'  shift, and go to state 85
+    ','  shift, and go to state 86
+
+
+state 66
+
+   21 fieldList: field .
+
+    $default  reduce using rule 21 (fieldList)
+
+
+state 67
+
+   23 field: colName . type
+   24      | colName . type TOKEN_NOT TOKEN_NULL
+
+    TOKEN_INT      shift, and go to state 87
+    TOKEN_VARCHAR  shift, and go to state 88
+    TOKEN_DATE     shift, and go to state 89
+    TOKEN_FLOAT    shift, and go to state 90
+
+    type  go to state 91
+
+
+state 68
+
+   19 idxStmt: TOKEN_CREATE TOKEN_INDEX tbName '(' colName . ')'
+
+    ')'  shift, and go to state 92
+
+
+state 69
+
+   20 idxStmt: TOKEN_DROP TOKEN_INDEX tbName '(' colName . ')'
+
+    ')'  shift, and go to state 93
+
+
+state 70
+
+   42 valueLists: '(' . valueList ')'
+
+    TOKEN_NULL    shift, and go to state 94
+    VALUE_STRING  shift, and go to state 95
+    VALUE_INT     shift, and go to state 96
+
+    value      go to state 97
+    valueList  go to state 98
+
+
+state 71
+
+   15 tbStmt: TOKEN_INSERT TOKEN_INTO tbName TOKEN_VALUES valueLists .
+   43 valueLists: valueLists . ',' '(' valueList ')'
+
+    ','  shift, and go to state 99
+
+    $default  reduce using rule 15 (tbStmt)
+
+
+state 72
+
+   62 tbName: TOKEN_STRING_IDENTIFIER .
+   63 colName: TOKEN_STRING_IDENTIFIER .
+
+    '.'       reduce using rule 62 (tbName)
+    $default  reduce using rule 63 (colName)
+
+
+state 73
+
+   16 tbStmt: TOKEN_DELETE TOKEN_FROM tbName TOKEN_WHERE whereClause .
+   47 whereClause: whereClause . TOKEN_AND condition
+
+    TOKEN_AND  shift, and go to state 100
+
+    $default  reduce using rule 16 (tbStmt)
+
+
+state 74
+
+   46 whereClause: condition .
+
+    $default  reduce using rule 46 (whereClause)
+
+
+state 75
+
+   48 condition: col . op expr
+   49          | col . TOKEN_IS TOKEN_NULL
+   50          | col . TOKEN_IS TOKEN_NOT TOKEN_NULL
+
+    TOKEN_IS  shift, and go to state 101
+    OP_LT     shift, and go to state 102
+    OP_LE     shift, and go to state 103
+    OP_GT     shift, and go to state 104
+    OP_GE     shift, and go to state 105
+    OP_EQ     shift, and go to state 106
+    OP_NE     shift, and go to state 107
+
+    op  go to state 108
+
+
+state 76
+
+   52 col: tbName . '.' colName
+
+    '.'  shift, and go to state 109
+
+
+state 77
+
+   51 col: colName .
+
+    $default  reduce using rule 51 (col)
+
+
+state 78
+
+   17 tbStmt: TOKEN_UPDATE tbName TOKEN_SET setClause TOKEN_WHERE . whereClause
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 72
+
+    whereClause  go to state 110
+    condition    go to state 74
+    col          go to state 75
+    tbName       go to state 76
+    colName      go to state 77
+
+
+state 79
+
+   45 setClause: setClause ',' . colName '=' value
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    colName  go to state 111
+
+
+state 80
+
+   44 setClause: colName '=' . value
+
+    TOKEN_NULL    shift, and go to state 94
+    VALUE_STRING  shift, and go to state 95
+    VALUE_INT     shift, and go to state 96
+
+    value  go to state 112
+
+
+state 81
+
+   18 tbStmt: TOKEN_SELECT selector TOKEN_FROM tableList TOKEN_WHERE . whereClause
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 72
+
+    whereClause  go to state 113
+    condition    go to state 74
+    col          go to state 75
+    tbName       go to state 76
+    colName      go to state 77
+
+
+state 82
+
+   30 tableList: tableList ',' . tbName
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 114
+
+
+state 83
+
+   25 field: TOKEN_PRIMARY TOKEN_KEY . '(' columnList ')'
+
+    '('  shift, and go to state 115
+
+
+state 84
+
+   26 field: TOKEN_FOREIGN TOKEN_KEY . '(' colName ')' TOKEN_REFERENCES tbName '(' colName ')'
+
+    '('  shift, and go to state 116
+
+
+state 85
+
+   13 tbStmt: TOKEN_CREATE TOKEN_TABLE tbName '(' fieldList ')' .
+
+    $default  reduce using rule 13 (tbStmt)
+
+
+state 86
+
+   22 fieldList: fieldList ',' . field
+
+    TOKEN_PRIMARY            shift, and go to state 63
+    TOKEN_FOREIGN            shift, and go to state 64
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    field    go to state 117
+    colName  go to state 67
+
+
+state 87
+
+   33 type: TOKEN_INT . '(' VALUE_INT ')'
+
+    '('  shift, and go to state 118
+
+
+state 88
+
+   34 type: TOKEN_VARCHAR . '(' VALUE_INT ')'
+
+    '('  shift, and go to state 119
+
+
+state 89
+
+   35 type: TOKEN_DATE .
+
+    $default  reduce using rule 35 (type)
+
+
+state 90
+
+   36 type: TOKEN_FLOAT .
+
+    $default  reduce using rule 36 (type)
+
+
+state 91
+
+   23 field: colName type .
+   24      | colName type . TOKEN_NOT TOKEN_NULL
+
+    TOKEN_NOT  shift, and go to state 120
+
+    $default  reduce using rule 23 (field)
+
+
+state 92
+
+   19 idxStmt: TOKEN_CREATE TOKEN_INDEX tbName '(' colName ')' .
+
+    $default  reduce using rule 19 (idxStmt)
+
+
+state 93
+
+   20 idxStmt: TOKEN_DROP TOKEN_INDEX tbName '(' colName ')' .
+
+    $default  reduce using rule 20 (idxStmt)
+
+
+state 94
+
+   39 value: TOKEN_NULL .
+
+    $default  reduce using rule 39 (value)
+
+
+state 95
+
+   38 value: VALUE_STRING .
+
+    $default  reduce using rule 38 (value)
+
+
+state 96
+
+   37 value: VALUE_INT .
+
+    $default  reduce using rule 37 (value)
+
+
+state 97
+
+   40 valueList: value .
+
+    $default  reduce using rule 40 (valueList)
+
+
+state 98
+
+   41 valueList: valueList . ',' value
+   42 valueLists: '(' valueList . ')'
+
+    ')'  shift, and go to state 121
+    ','  shift, and go to state 122
+
+
+state 99
+
+   43 valueLists: valueLists ',' . '(' valueList ')'
+
+    '('  shift, and go to state 123
+
+
+state 100
+
+   47 whereClause: whereClause TOKEN_AND . condition
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 72
+
+    condition  go to state 124
+    col        go to state 75
+    tbName     go to state 76
+    colName    go to state 77
+
+
+state 101
+
+   49 condition: col TOKEN_IS . TOKEN_NULL
+   50          | col TOKEN_IS . TOKEN_NOT TOKEN_NULL
+
+    TOKEN_NOT   shift, and go to state 125
+    TOKEN_NULL  shift, and go to state 126
+
+
+state 102
+
+   55 op: OP_LT .
+
+    $default  reduce using rule 55 (op)
+
+
+state 103
+
+   56 op: OP_LE .
+
+    $default  reduce using rule 56 (op)
+
+
+state 104
+
+   57 op: OP_GT .
+
+    $default  reduce using rule 57 (op)
+
+
+state 105
+
+   58 op: OP_GE .
+
+    $default  reduce using rule 58 (op)
+
+
+state 106
+
+   59 op: OP_EQ .
+
+    $default  reduce using rule 59 (op)
+
+
+state 107
+
+   60 op: OP_NE .
+
+    $default  reduce using rule 60 (op)
+
+
+state 108
+
+   48 condition: col op . expr
+
+    TOKEN_NULL               shift, and go to state 94
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 72
+    VALUE_STRING             shift, and go to state 95
+    VALUE_INT                shift, and go to state 96
+
+    value    go to state 127
+    col      go to state 128
+    expr     go to state 129
+    tbName   go to state 76
+    colName  go to state 77
+
+
+state 109
+
+   52 col: tbName '.' . colName
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    colName  go to state 130
+
+
+state 110
+
+   17 tbStmt: TOKEN_UPDATE tbName TOKEN_SET setClause TOKEN_WHERE whereClause .
+   47 whereClause: whereClause . TOKEN_AND condition
+
+    TOKEN_AND  shift, and go to state 100
+
+    $default  reduce using rule 17 (tbStmt)
+
+
+state 111
+
+   45 setClause: setClause ',' colName . '=' value
+
+    '='  shift, and go to state 131
+
+
+state 112
+
+   44 setClause: colName '=' value .
+
+    $default  reduce using rule 44 (setClause)
+
+
+state 113
+
+   18 tbStmt: TOKEN_SELECT selector TOKEN_FROM tableList TOKEN_WHERE whereClause .
+   47 whereClause: whereClause . TOKEN_AND condition
+
+    TOKEN_AND  shift, and go to state 100
+
+    $default  reduce using rule 18 (tbStmt)
+
+
+state 114
+
+   30 tableList: tableList ',' tbName .
+
+    $default  reduce using rule 30 (tableList)
+
+
+state 115
+
+   25 field: TOKEN_PRIMARY TOKEN_KEY '(' . columnList ')'
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    columnList  go to state 132
+    colName     go to state 35
+
+
+state 116
+
+   26 field: TOKEN_FOREIGN TOKEN_KEY '(' . colName ')' TOKEN_REFERENCES tbName '(' colName ')'
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    colName  go to state 133
+
+
+state 117
+
+   22 fieldList: fieldList ',' field .
+
+    $default  reduce using rule 22 (fieldList)
+
+
+state 118
+
+   33 type: TOKEN_INT '(' . VALUE_INT ')'
+
+    VALUE_INT  shift, and go to state 134
+
+
+state 119
+
+   34 type: TOKEN_VARCHAR '(' . VALUE_INT ')'
+
+    VALUE_INT  shift, and go to state 135
+
+
+state 120
+
+   24 field: colName type TOKEN_NOT . TOKEN_NULL
+
+    TOKEN_NULL  shift, and go to state 136
+
+
+state 121
+
+   42 valueLists: '(' valueList ')' .
+
+    $default  reduce using rule 42 (valueLists)
+
+
+state 122
+
+   41 valueList: valueList ',' . value
+
+    TOKEN_NULL    shift, and go to state 94
+    VALUE_STRING  shift, and go to state 95
+    VALUE_INT     shift, and go to state 96
+
+    value  go to state 137
+
+
+state 123
+
+   43 valueLists: valueLists ',' '(' . valueList ')'
+
+    TOKEN_NULL    shift, and go to state 94
+    VALUE_STRING  shift, and go to state 95
+    VALUE_INT     shift, and go to state 96
+
+    value      go to state 97
+    valueList  go to state 138
+
+
+state 124
+
+   47 whereClause: whereClause TOKEN_AND condition .
+
+    $default  reduce using rule 47 (whereClause)
+
+
+state 125
+
+   50 condition: col TOKEN_IS TOKEN_NOT . TOKEN_NULL
+
+    TOKEN_NULL  shift, and go to state 139
+
+
+state 126
+
+   49 condition: col TOKEN_IS TOKEN_NULL .
+
+    $default  reduce using rule 49 (condition)
+
+
+state 127
+
+   54 expr: value .
+
+    $default  reduce using rule 54 (expr)
+
+
+state 128
+
+   53 expr: col .
+
+    $default  reduce using rule 53 (expr)
+
+
+state 129
+
+   48 condition: col op expr .
+
+    $default  reduce using rule 48 (condition)
+
+
+state 130
+
+   52 col: tbName '.' colName .
+
+    $default  reduce using rule 52 (col)
+
+
+state 131
+
+   45 setClause: setClause ',' colName '=' . value
+
+    TOKEN_NULL    shift, and go to state 94
+    VALUE_STRING  shift, and go to state 95
+    VALUE_INT     shift, and go to state 96
+
+    value  go to state 140
+
+
+state 132
+
+   25 field: TOKEN_PRIMARY TOKEN_KEY '(' columnList . ')'
+   32 columnList: columnList . ',' colName
+
+    ')'  shift, and go to state 141
+    ','  shift, and go to state 52
+
+
+state 133
+
+   26 field: TOKEN_FOREIGN TOKEN_KEY '(' colName . ')' TOKEN_REFERENCES tbName '(' colName ')'
+
+    ')'  shift, and go to state 142
+
+
+state 134
+
+   33 type: TOKEN_INT '(' VALUE_INT . ')'
+
+    ')'  shift, and go to state 143
+
+
+state 135
+
+   34 type: TOKEN_VARCHAR '(' VALUE_INT . ')'
+
+    ')'  shift, and go to state 144
+
+
+state 136
+
+   24 field: colName type TOKEN_NOT TOKEN_NULL .
+
+    $default  reduce using rule 24 (field)
+
+
+state 137
+
+   41 valueList: valueList ',' value .
+
+    $default  reduce using rule 41 (valueList)
+
+
+state 138
+
+   41 valueList: valueList . ',' value
+   43 valueLists: valueLists ',' '(' valueList . ')'
+
+    ')'  shift, and go to state 145
+    ','  shift, and go to state 122
+
+
+state 139
+
+   50 condition: col TOKEN_IS TOKEN_NOT TOKEN_NULL .
+
+    $default  reduce using rule 50 (condition)
+
+
+state 140
+
+   45 setClause: setClause ',' colName '=' value .
+
+    $default  reduce using rule 45 (setClause)
+
+
+state 141
+
+   25 field: TOKEN_PRIMARY TOKEN_KEY '(' columnList ')' .
+
+    $default  reduce using rule 25 (field)
+
+
+state 142
+
+   26 field: TOKEN_FOREIGN TOKEN_KEY '(' colName ')' . TOKEN_REFERENCES tbName '(' colName ')'
+
+    TOKEN_REFERENCES  shift, and go to state 146
+
+
+state 143
+
+   33 type: TOKEN_INT '(' VALUE_INT ')' .
+
+    $default  reduce using rule 33 (type)
+
+
+state 144
+
+   34 type: TOKEN_VARCHAR '(' VALUE_INT ')' .
+
+    $default  reduce using rule 34 (type)
+
+
+state 145
+
+   43 valueLists: valueLists ',' '(' valueList ')' .
+
+    $default  reduce using rule 43 (valueLists)
+
+
+state 146
+
+   26 field: TOKEN_FOREIGN TOKEN_KEY '(' colName ')' TOKEN_REFERENCES . tbName '(' colName ')'
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 29
+
+    tbName  go to state 147
+
+
+state 147
+
+   26 field: TOKEN_FOREIGN TOKEN_KEY '(' colName ')' TOKEN_REFERENCES tbName . '(' colName ')'
+
+    '('  shift, and go to state 148
+
+
+state 148
+
+   26 field: TOKEN_FOREIGN TOKEN_KEY '(' colName ')' TOKEN_REFERENCES tbName '(' . colName ')'
+
+    TOKEN_STRING_IDENTIFIER  shift, and go to state 31
+
+    colName  go to state 149
+
+
+state 149
+
+   26 field: TOKEN_FOREIGN TOKEN_KEY '(' colName ')' TOKEN_REFERENCES tbName '(' colName . ')'
+
+    ')'  shift, and go to state 150
+
+
+state 150
+
+   26 field: TOKEN_FOREIGN TOKEN_KEY '(' colName ')' TOKEN_REFERENCES tbName '(' colName ')' .
+
+    $default  reduce using rule 26 (field)

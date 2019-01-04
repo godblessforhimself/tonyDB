@@ -9,37 +9,27 @@ int BTNode::attrLength;
 AttrType BTNode::attrType;
 BufPageManager* BTNode::bufPageManager;
 /* ix manager implement */
-AttrType Head_Page::getType() {
-    if (strncmp(attrType, "INT", sizeof(attrType)) == 0) {
-        return AttrType::INT;
-    } else if (strncmp(attrType, "FLOAT", sizeof(attrType)) == 0) {
-        return AttrType::FLOAT;
-    } else if (strncmp(attrType, "STRING", sizeof(attrType)) == 0) {
-        return AttrType::STRING;
+// 约定 null位在attrlen后, 0表示null, 1表示非null
+void appendNullbit(char *dst, char *src, int len) {
+    if (src == NULL) {
+        // 
+        memset(dst, 0, len + 1);
     } else {
-        return AttrType::INVALID;
+        memcpy(dst, src, len);
+        dst[len] = 1;
     }
+}
+AttrType Head_Page::getType() {
+    return getAttrType(attrType);
 }
 void Head_Page::setHeader(BufType b, AttrType attrType, int attrLength) {
     /* 将 attrType attrLength 写入内存 */
     Head_Page* ptr = (Head_Page*)b;
     char typestr[8];
-    switch (attrType) {
-        case AttrType::INT:
-            strncpy(typestr, "INT", sizeof(typestr));
-            break;
-        case FLOAT:
-            strncpy(typestr, "FLOAT", sizeof(typestr));
-            break;
-        case STRING:
-            strncpy(typestr, "STRING", sizeof(typestr));
-            break;
-        default:
-            strncpy(typestr, "INVALID", sizeof(typestr));
-    }
+    transAttrType(attrType, typestr);
     memcpy((void*)b, typestr, sizeof(attrType));
     ptr->attrLength = attrLength;
-    ptr->entryLimit = (PAGESIZE - sizeof(int) * 7) / (attrLength + sizeof(RID) + sizeof(int)) - 1; // 为溢出留空间
+    ptr->entryLimit = (PAGESIZE - sizeof(int) * 7) / (attrLength + 1 + sizeof(RID) + sizeof(int)) - 1; // 为溢出留空间
     ptr->pageNum = 2;
     ptr->root = 1;
     ptr->nextFree = 2;
@@ -93,15 +83,20 @@ IX_Manager::~IX_Manager() {
 
 }
 int IX_Manager::CreateIndex(const char *fileName, int indexNo, AttrType attrType, int attrLength) {
+    // 为了处理空值，增加一字节，0表示空，1表示非空
     // 设置好文件名
 	char indexFileName[MAX_FILENAME_LENGTH];
     setFileName(indexFileName, fileName, indexNo);
     // 创建，打开文件，申请headpage的缓存，写进缓存，然后更新
-    bool created = fileManager->createFile(indexFileName);
-    assert(created);
+    if (!fileManager->createFile(indexFileName)) {
+        cout << "IX_Manager::CreateInde 创建文件" << indexFileName << "失败\n";
+        return -1;
+    }
     int fileID;
-    bool opened = fileManager->openFile(indexFileName, fileID);
-    assert(opened);
+    if (!fileManager->openFile(indexFileName, fileID)) {
+        cout << "IX_Manager::CreateInde 打开文件" << indexFileName << "失败\n";
+        return -1;
+    }
     int index;
     BufType b = bufPageManager->allocPage(fileID, 0, index, false);
     Head_Page::setHeader(b, attrType, attrLength);
@@ -114,7 +109,10 @@ int IX_Manager::CreateIndex(const char *fileName, int indexNo, AttrType attrType
     *(root.prev_free) = 0; *(root.next_free) = 2;
     root.setLeaf(true);
     forcePage(bufPageManager, index);
-    assert(fileManager->closeFile(index) == 0);
+    if (fileManager->closeFile(index) != 0) {
+        cout << "IX_Manager::CreateIndex 关闭文件失败\n";
+        return -1;
+    }
     Debug::debug("IX_Manager::CreateIndex %s", indexFileName);
     return 0;
 }
@@ -129,19 +127,16 @@ int IX_Manager::DestroyIndex(const char *fileName, int indexNo) {
 int IX_Manager::OpenIndex(const char *fileName, int indexNo, IX_IndexHandle &indexHandle) {
 	int fileID;
     char indexFileName[MAX_FILENAME_LENGTH];
-    bool opened = fileManager->openFile(indexFileName, fileID);
-    if (!opened) {
+    if (!fileManager->openFile(indexFileName, fileID)) {
+        cout << "IX_Manager::OpenIndex 打开文件" << fileName << "失败\n";
     	return -1;
 	}
 	int index;
 	BufType b = bufPageManager->getPage(fileID, 0, index);
 	indexHandle.init(fileID, b, this);
-    bufPageManager->release(index);
     //释放首页，关闭时再写回
+    bufPageManager->release(index);
     Debug::debug("IX_Manager::OpenIndex %s", indexFileName);
-    return 0;
-}
-int IX_Manager::CloseIndex(IX_IndexHandle &indexHandle) {
     return 0;
 }
 /* IX_IndexHandle implement */
@@ -167,8 +162,10 @@ IX_IndexHandle::IX_IndexHandle() {
 }
 IX_IndexHandle::~IX_IndexHandle() {
     writeHeader();
+    ForcePages();
+    fileManager->closeFile(fileID);
 }
-int IX_IndexHandle::searchEntryRecur(int v, void *pData, RID& rid) {
+/*int IX_IndexHandle::searchEntryRecur(int v, void *pData, RID& rid) {
     if (v == NULL_NODE)
         return -1;
     BTNode node_v = loadNode(v);
@@ -218,6 +215,9 @@ int IX_IndexHandle::SearchEntry(void *pData, RID& rid, bool compare) {
             return 0;
         }
     }
+}*/
+int IX_IndexHandle::InsertNull(const RID &rid) {
+    return 0;
 }
 int IX_IndexHandle::InsertEntry(void *pData, const RID &rid) {
     if (!insert((char*)pData, rid)) {
@@ -281,7 +281,10 @@ BTNode IX_IndexHandle::createNode() {
         headPage.pageNum++;
     return node;
 }
-int IX_IndexHandle::search(char* e, const RID& rid) {
+int IX_IndexHandle::search(char* e1, const RID& rid) {
+    // 入口的e是原型，处理一下
+    char e[MAX_ATTRLENGTH];
+    appendNullbit(e, e1, attrLength);
     // 搜索到叶子，若确实相等，则返回pageID，没有相等，返回无
     // 1.待插入位置
     // 2.目标元素
@@ -314,12 +317,15 @@ int IX_IndexHandle::search(char* e, const RID& rid) {
     return NULL_NODE;
 }
 bool IX_IndexHandle::remove(char* e, const RID& rid_in) {
+    // 原型
     Debug::print(Debug::BTREE_REMOVE, "IX_IndexHandle::remove is called");
     int v = search(e, rid_in);
     Debug::print(Debug::BTREE_REMOVE, "IX_IndexHandle::remove 删除的结点pageID:%d", v);
     if (v == NULL_NODE) return false;
     BTNode node_v = loadNode(v);
-    int r = node_v.search(e, rid_in);
+    char e1[MAX_ATTRLENGTH];
+    appendNullbit(e1, e, attrLength);
+    int r = node_v.search(e1, rid_in); // 拓展型
     Debug::print(Debug::BTREE_REMOVE, "IX_IndexHandle::remove 删除的结点秩:%d", r);
     assert(node_v.isLeaf());
     node_v.removeData(r);
@@ -458,18 +464,19 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
     return;
 }
 bool IX_IndexHandle::insert(char* e, const RID& rid_in) {
+    // e原型
     /* pseudocode 
         1.找到叶子结点v
         2.插入(e,rid_in)
         3.solveOverflow
     */
-    //Debug::debug("Enter search");
-    int v = search(e, rid_in);
-    //Debug::debug("Leave search");
+    char e1[MAX_ATTRLENGTH];
+    appendNullbit(e1, e, attrLength);
+    int v = search(e, rid_in); // 原型
     if (v != NULL_NODE) return false;
     BTNode node_hot = loadNode(_hot);
-    int r = node_hot.search(e, rid_in);
-    node_hot.insertData(r, e, rid_in);
+    int r = node_hot.search(e1, rid_in); // 拓展型
+    node_hot.insertData(r, e1, rid_in); // 拓展型
     Debug::print(Debug::BTREE_INSERT, "IX_IndexHandle::insert to %d, rank %d", node_hot.pageID, r);
     //Debug::debug("IX_IndexHandle::insert to %d, rank %d", node_hot.pageID, r);
     //Debug::debug("IX_IndexHandle::insert to %d, rank %d", node_hot.pageID, r);
@@ -665,7 +672,10 @@ void IX_IndexHandle::traverse(int pageID) {
         }
     }
 }
-void IX_IndexHandle::findFirstValue(void* value, int& pageID, int& rank) {
+void IX_IndexHandle::findFirstValue(void* value0, int& pageID, int& rank) {
+    // 原型
+    char value[MAX_ATTRLENGTH];
+    appendNullbit(value, (char*)value0, attrLength);
     // 若找到返回0
     int v = _root;
     while (v != NULL_NODE) {
@@ -716,7 +726,6 @@ void IX_IndexHandle::findFirstValue(void* value, int& pageID, int& rank) {
             v = node_v.getChild(r);
         }
     }
-
 }
 int IX_IndexHandle::findLastValue(void* value, int& pageID, int& rank, RID& rid) {
     return 0;
@@ -749,21 +758,20 @@ int IX_IndexScan::OpenScan(IX_IndexHandle &indexHandle, CompOp compOp, void *val
     attrLength = indexHandle.attrLength;
     attrType = indexHandle.headPage.getType();
     current_value = new char[attrLength];
-    this->value = new char[attrLength];
-    memcpy(this->value, value, attrLength);
+    if (value == NULL) {
+        if (compOp == EQ_OP || compOp == NE_OP) {
+
+        } else {
+            cout << "IX_IndexScan::OpenScan 空值只能使用EQ或者NE\n";
+            return -1;
+        }
+        this->value = NULL;
+    } else {
+        this->value = new char[attrLength];
+        memcpy(this->value, value, attrLength);
+    }
     this->compOp = compOp;
-    if (compOp == NO_OP || compOp == NE_OP) {
-        Debug::error("IX_IndexScan use wrong op");
-        return -1;
-    }
-    switch (compOp) {
-        case CompOp::EQ_OP : comparator = &equal; reverse = false; break;
-        case CompOp::LT_OP : comparator = &less_than; reverse = true; break;
-        case CompOp::GT_OP : comparator = &greater_than; reverse = false; break;
-        case CompOp::LE_OP : comparator = &less_than_or_eq_to; reverse = true; break;
-        case CompOp::GE_OP : comparator = &greater_than_or_eq_to; reverse = false; break;
-        default: Debug::error("IX_IndexScan use wrong op"); break;
-    }
+    comparator = getComparator(compOp);
     return 0;
 }
 int IX_IndexScan::tryLoadNext(BTNode& node, int& rank, char* data, RID& rid) {
@@ -784,7 +792,20 @@ int IX_IndexScan::findNext(RID& rid) {
     // 若非第一次获取，则需要判断是否大于之前获取的值
     // 返回0表示获取成功。需要记录此时的值
     while (tryLoadNext(node_current, rank, data_global, rid_global) == 0) {
-        if (comparator(data_global, value, attrType, attrLength)) {
+        bool satisfied;
+        if (value == NULL) {
+            assert(compOp == EQ_OP || compOp == NE_OP);
+            if (compOp == EQ_OP) {
+                // 为null
+                satisfied = (data_global[attrLength] == 0);
+            } else {
+                // 为非null
+                satisfied = (data_global[attrLength] == 1);
+            }
+        } else {
+            satisfied = comparator(data_global, value, attrType, attrLength);
+        }
+        if (satisfied) {
             // 满足过滤条件
             if (numScanned == 0) {
                 rid.copy(rid_global);
@@ -910,6 +931,20 @@ BTNode::BTNode(BufPageManager* bufPageManager) {
     pageID = bufIndex = -1;
 }
 int BTNode::comp(char* v1, char* v2) {
+    // 拓展型
+    // 返回 v1 - v2;
+    // 比较时，空值之间相等，小于其他值 v1,v2可能从其他地方取得
+    assert(v1 != NULL && v2 != NULL);
+    bool isNull1, isNull2;
+    isNull1 = (v1[attrLength] == 0);
+    isNull2 = (v2[attrLength] == 0);
+    if (isNull1 && isNull2) {
+        return 0;
+    } else if (isNull1) {
+        return -1;
+    } else if (isNull2) {
+        return 1;
+    }
     switch (BTNode::attrType) {
         case AttrType::INT:
             return *((int*)v1) - *((int*)v2);
@@ -921,6 +956,8 @@ int BTNode::comp(char* v1, char* v2) {
             return 1;
         case AttrType::STRING:
             return strncmp(v1, v2, attrLength);
+        case DATE:
+            return 0;
         case AttrType::INVALID:
             Debug::produce("BTNode comp invalid type");
             return 0;
@@ -928,37 +965,13 @@ int BTNode::comp(char* v1, char* v2) {
     return 0;
 }
 int BTNode::comp(char* v1, const RID& r1, char* v2, const RID& r2) {
-    int value = 0;
-    switch (BTNode::attrType) {
-        case AttrType::INT:
-            if (*((int*)v1) - *((int*)v2) < 0) {
-                value = -1;
-            } else if (*((int*)v1) - *((int*)v2) == 0) {
-                value = 0;
-            } else {
-                value = 1;
-            }
-            break;
-        case AttrType::FLOAT:
-            if (*((float*)v1) < *((float*)v1)) 
-                value = -1;
-            else if (*((float*)v1) == *((float*)v1))
-                value = 0;
-            else 
-                value = 1;
-            break;
-        case AttrType::STRING:
-            value = strncmp(v1, v2, attrLength);
-            break;
-        case AttrType::INVALID:
-            Debug::produce("BTNode comp invalid type");
-            value = 0;
-    }
-    if (value != 0) 
-        return value;
-    return RID::comp(r1, r2);
+    // 拓展型
+    int value = BTNode::comp(v1, v2);
+    return (value == 0) ? RID::comp(r1, r2) : value;
 }
 int BTNode::search(char* data, const RID& rid) {
+    // 拓展型
+    assert(data != NULL);
     // 规定 索引保存子树的最小值
     // 若为叶子结点，返回待插入位置[0, count] 或者存在的秩 [0, count)
     // 若为索引结点，返回待插入位置或存在的秩所在的子树的秩 [0, count)
@@ -1028,49 +1041,88 @@ void BTNode::setChild(int rank, int pageID) {
     Debug::debug("setChild rank [%d, %d]", rank, *child_count);
 }
 void BTNode::setData(int rank, char* data, RID& rid) {
+    // 拓展型
     if (rank < 0 || rank >= *entry_count) {
         Debug::error("setData range exceeds %d, %d", rank, *entry_count);
         return;
     }
-    char* value = values + rank * attrLength;
-    memcpy(value, data, attrLength);
-    rids[rank].copy(rid);
+    assert(data != NULL);
     markDirty();
+    // 增加了1位
+    char* value = values + rank * (attrLength + 1);
+    memcpy(value, data, attrLength + 1);
+    rids[rank].copy(rid);
 }
 void BTNode::removeData(int rank) {
     // copy (rank, size) to [rank, size - 1)
-    int len = (*entry_count - 1 - rank);
+    int len = (*entry_count - 1 - rank); // len是右边的数目
     if (len < 0 || rank < 0) {
         Debug::error("removeData rank [%d, %d]", rank, *entry_count);
         return;
     }
-    int offset = rank * attrLength;
+    int actualLen = attrLength + 1;
+    int offset = rank * actualLen;
     void* dest = (void*)(values + offset);
-    void* src = (void*)(values + (offset + attrLength));
-    memmove(dest, src, len * attrLength);
+    void* src = (void*)(values + (offset + actualLen));
+    memmove(dest, src, len * actualLen);
     for (int i = rank; i < *entry_count - 1; i++) {
         rids[i].copy(rids[i + 1]);
     }
     *entry_count-=1;
     markDirty();
 }
+void BTNode::getData(int rank, char* data, RID& rid) const{
+    // 拓展型
+    if (rank < 0 || rank >= *entry_count) {
+        Debug::error("getData range exceeds %d, %d", rank, *entry_count);
+        return;
+    }
+    assert(data != NULL);
+    int actualLen = attrLength + 1;
+    char* value = values + rank * actualLen;
+    memcpy(data, value, actualLen);
+    rid.copy(rids[rank]);
+}
+void BTNode::insertData(int rank, char* data, const RID& rid) {
+    // 拓展型
+    // rank [0, dataSize]
+    if (rank > *entry_count || rank < 0) {
+        Debug::error("insertData rank [%d, %d]", rank, *entry_count);
+        return;
+    }
+    assert(data != NULL);
+    markDirty();
+    int actualLen = attrLength + 1;
+    // [rank, dataSize) -> (rank, dataSize]
+    if (rank != *entry_count)
+        memmove((void*)(values + (rank + 1) * actualLen), (void*)(values + rank * actualLen), (*entry_count - rank) * actualLen);
+    for (int i = *entry_count; i > rank; i--) {
+        rids[i].copy(rids[i - 1]);
+    }
+    char *value = values + rank * actualLen;
+    memset(value, 0, actualLen);
+    rids[rank].copy(rid);
+    *entry_count+=1;
+}
 void BTNode::removeData(int rank, char* data, RID& rid) {
+    // 拓展型
     int len = (*entry_count - 1 - rank);
     if (len < 0 || rank < 0) {
         Debug::error("removeData (3param) rank [%d, %d]", rank, *entry_count);
         return;
     }
-    int offset = rank * attrLength;
+    markDirty();
+    int actualLen = attrLength + 1;
+    int offset = rank * actualLen;
     void* dest = (void*)(values + offset);
-    void* src = (void*)(values + (offset + attrLength));
-    memcpy(data, dest, attrLength);
+    void* src = (void*)(values + (offset + actualLen));
+    memcpy(data, dest, actualLen);
     rid.copy(rids[rank]);
-    memmove(dest, src, len * attrLength);
+    memmove(dest, src, len * actualLen);
     for (int i = rank; i < *entry_count - 1; i++) {
         rids[i].copy(rids[i + 1]);
     }
     *entry_count-=1;
-    markDirty();
 }
 int BTNode::removeChild(int rank) {
     if (rank < 0 || rank >= *child_count) {
@@ -1083,28 +1135,6 @@ int BTNode::removeChild(int rank) {
     *child_count-=1;
     markDirty();
     return ret;
-}
-void BTNode::insertData(int rank, char* data, const RID& rid) {
-    // rank [0, dataSize]
-    if (rank > *entry_count || rank < 0) {
-        Debug::error("insertData rank [%d, %d]", rank, *entry_count);
-        return;
-    }
-    markDirty();
-    if (rank == *entry_count) {
-        memcpy(values + rank * attrLength, data, attrLength);
-        rids[rank].copy(rid);
-        *entry_count+=1;
-        return;
-    }
-    // [rank, dataSize) -> (rank, dataSize]
-    memmove((void*)(values + (rank + 1) * attrLength), (void*)(values + rank * attrLength), (*entry_count - rank) * attrLength);
-    for (int i = *entry_count; i > rank; i--) {
-        rids[i].copy(rids[i - 1]);
-    }
-    memcpy((void*)(values + rank * attrLength), data, attrLength);
-    rids[rank].copy(rid);
-    *entry_count+=1;
 }
 void BTNode::insertChild(int rank, int id) {
     // rank [0, childSize]
@@ -1137,15 +1167,6 @@ int BTNode::getChild(int child) const{
     if (child >= 0 && child < *child_count)
         return childs[child];
     return NULL_NODE;
-}
-void BTNode::getData(int rank, char* data, RID& rid) const{
-    if (rank < 0 || rank >= *entry_count) {
-        Debug::error("getData range exceeds %d, %d", rank, *entry_count);
-        return;
-    }
-    char* value = values + rank * attrLength;
-    memcpy(data, value, attrLength);
-    rid.copy(rids[rank]);
 }
 int BTNode::getNextData(int& rank, char* data, RID& rid) const {
     // 获取rank+1的数据
@@ -1205,7 +1226,8 @@ void BTNode::withContentPage(BufType b, Head_Page headPage, int pID, int index) 
     BTNode::attrType = headPage.getType();
     pageID = pID; bufIndex = index;
     values = (char*)((char*)b + sizeof(int) * 8);
-    char* rid_pos = values + (BTNode::entryLimit + 1) * attrLength;
+    int actualLen = attrLength + 1;
+    char* rid_pos = values + (BTNode::entryLimit + 1) * actualLen;
     char* child_pos = rid_pos + (BTNode::entryLimit + 1) * sizeof(RID);
     rids = (RID*)(rid_pos);
     childs = (int*)child_pos;
