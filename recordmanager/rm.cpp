@@ -27,7 +27,7 @@ RecordManager::~RecordManager() {
 }
 bool RecordManager::createFile(const char* filename, int recordSize) {
 	/* create a file, then init settings in first page*/
-	Debug::debug("RecordManager::createFile %s:\n", filename);
+	//Debug::debug("RecordManager::createFile %s:\n", filename);
 	if (!fileManager->createFile(filename)) {
 		Debug::debug("RecordManager::createFile createFile failed!\n");
 		return false;
@@ -70,13 +70,12 @@ int RecordManager::openFile(const char* filename, RecordHandle& recordHandle) {
 	}
 	recordHandle.setManager(this);
 	recordHandle.setIndex(index);
-	printf("RecordManager::openFile success!\n");
+	printf("RecordManager::openFile %s success!\n", filename);
 	return 0;
 }
 bool RecordManager::closeFile(RecordHandle& recordHandle) {
 	recordHandle.writeFH();
 	bufPageManager->close();
-	Debug::debug("RM.closeFile, record write back");
 	if (fileManager->closeFile(recordHandle.getFileID()) != 0) {
 		return false;
 	}
@@ -180,7 +179,6 @@ bool RecordHandle::deleteRec(const RID &rid) {
 	cout << fileID << " ," <<  page << endl;
 	BufType b = bufPageManager->getPage(fileID, page, index), temp;
 	// check if bitmap[slot] is true 
-	printf("lp\n");
 	if (PageReader::getBitmap(b, fileHeader.bitmapStart, slot)) {
 		// revise bitmap and count mark it dirty
 		PageReader::setBitmap(b, fileHeader.bitmapStart, slot, false);
@@ -301,9 +299,7 @@ int RecordScan::getNextRec(Record& record) {
 		scanSlot = -1;
 	}
 	while (1) {
-		cout << "getNextRec 现在位于[" << scanPage << ", " << scanSlot << "]\n";
 		if (scanPage >= pageNum) {
-			cout << scanPage << "," << pageNum << "scanPage >= pageNum\n";
 			return -1;
 		}
 		int index;

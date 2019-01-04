@@ -31,6 +31,7 @@ struct BTNode {
     int pageID, bufIndex;
     BTNode();
     BTNode(BufPageManager* bufPageManager);
+    ~BTNode();
     void withEmptyPage(BufType b, Head_Page headPage, int pID, int index);
     void withContentPage(BufType b, Head_Page headPage, int pID, int index);
     void insertData(int rank, char* data, const RID& rid); // 拓展型
@@ -87,7 +88,7 @@ class IX_IndexHandle {
     int findLastValue(void* value, int& pageID, int& rank, RID& rid);
     IX_IndexHandle();                             // Constructor
     ~IX_IndexHandle();                             // Destructor
-    int InsertEntry(void *pData, const RID &rid);  // Insert new index entry
+    int InsertEntry(void *pData, const RID &rid);  // 原型
     int InsertNull(const RID &rid);
     int DeleteEntry(void *pData, const RID &rid);  // Delete index entry
     //int SearchEntry(void *pData, RID& rid, bool compare); // 搜索大于pData rid并更新

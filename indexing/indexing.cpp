@@ -53,7 +53,7 @@ void Head_Page::parse(BufType b) {
     right = ptr->right;
 }
 void printHead(Head_Page head) {
-    Debug::debug("printHead: attrType %s, attrLength %d, entryLimit %d, pageNum %d, root %d, nextFree %d, entryNum %d", \
+    Debug::debug("printHead: 属性 %s, 长度 %d, 最多条目 %d, 页数 %d, 根下标 %d, 下一个空闲页 %d, 条目数量 %d", \
         head.attrType, head.attrLength, head.entryLimit, head.pageNum, head.root, head.nextFree, head.entryNum);
        
 }
@@ -63,10 +63,10 @@ void forcePage(BufPageManager* bufPageManager, int index) {
     bufPageManager->writeBack(index);
 }
 void setFileName(char* dest, const char* fileName, int indexNo) {
-    memset(dest, 0, MAX_FILENAME_LENGTH);
     int len = strlen(fileName);
-    memcpy(dest, fileName, len);
-    int i = 0;
+    strcpy(dest, fileName);
+    dest[len] = '.';
+    int i = 1;
     while (indexNo >= 0) {
         dest[i + len] = '0' + indexNo % 10;
         indexNo = indexNo / 10;
@@ -86,15 +86,16 @@ int IX_Manager::CreateIndex(const char *fileName, int indexNo, AttrType attrType
     // 为了处理空值，增加一字节，0表示空，1表示非空
     // 设置好文件名
 	char indexFileName[MAX_FILENAME_LENGTH];
+    memset(indexFileName, 0, sizeof(indexFileName));
     setFileName(indexFileName, fileName, indexNo);
     // 创建，打开文件，申请headpage的缓存，写进缓存，然后更新
     if (!fileManager->createFile(indexFileName)) {
-        cout << "IX_Manager::CreateInde 创建文件" << indexFileName << "失败\n";
+        cout << "IX_Manager::CreateIndex 创建文件" << indexFileName << "失败\n";
         return -1;
     }
     int fileID;
     if (!fileManager->openFile(indexFileName, fileID)) {
-        cout << "IX_Manager::CreateInde 打开文件" << indexFileName << "失败\n";
+        cout << "IX_Manager::CreateIndex 打开文件" << indexFileName << "失败\n";
         return -1;
     }
     int index;
@@ -109,24 +110,27 @@ int IX_Manager::CreateIndex(const char *fileName, int indexNo, AttrType attrType
     *(root.prev_free) = 0; *(root.next_free) = 2;
     root.setLeaf(true);
     forcePage(bufPageManager, index);
-    if (fileManager->closeFile(index) != 0) {
+    if (fileManager->closeFile(fileID) != 0) {
         cout << "IX_Manager::CreateIndex 关闭文件失败\n";
         return -1;
     }
-    Debug::debug("IX_Manager::CreateIndex %s", indexFileName);
+    Debug::debug("IX_Manager::CreateIndex 创建了索引文件:%s", indexFileName);
     return 0;
 }
 int IX_Manager::DestroyIndex(const char *fileName, int indexNo) {
     char indexFileName[MAX_FILENAME_LENGTH];
+    memset(indexFileName, 0, sizeof(indexFileName));
     setFileName(indexFileName, fileName, indexNo);
-    Debug::debug("IX_Manager::DestroyIndex %s", indexFileName);
     if (remove(indexFileName)) 
         return -1;
+    Debug::debug("IX_Manager::DestroyIndex 删除了索引文件:%s", indexFileName);
     return 0;
 }
 int IX_Manager::OpenIndex(const char *fileName, int indexNo, IX_IndexHandle &indexHandle) {
 	int fileID;
     char indexFileName[MAX_FILENAME_LENGTH];
+    memset(indexFileName, 0, sizeof(indexFileName));
+    setFileName(indexFileName, fileName, indexNo);
     if (!fileManager->openFile(indexFileName, fileID)) {
         cout << "IX_Manager::OpenIndex 打开文件" << fileName << "失败\n";
     	return -1;
@@ -136,7 +140,7 @@ int IX_Manager::OpenIndex(const char *fileName, int indexNo, IX_IndexHandle &ind
 	indexHandle.init(fileID, b, this);
     //释放首页，关闭时再写回
     bufPageManager->release(index);
-    Debug::debug("IX_Manager::OpenIndex %s", indexFileName);
+    Debug::debug("IX_Manager::OpenIndex 打开了索引文件:%s", indexFileName);
     return 0;
 }
 /* IX_IndexHandle implement */
@@ -282,7 +286,7 @@ BTNode IX_IndexHandle::createNode() {
     return node;
 }
 int IX_IndexHandle::search(char* e1, const RID& rid) {
-    // 入口的e是原型，处理一下
+    // 原型
     char e[MAX_ATTRLENGTH];
     appendNullbit(e, e1, attrLength);
     // 搜索到叶子，若确实相等，则返回pageID，没有相等，返回无
@@ -674,19 +678,23 @@ void IX_IndexHandle::traverse(int pageID) {
 }
 void IX_IndexHandle::findFirstValue(void* value0, int& pageID, int& rank) {
     // 原型
+    cout << *(int*)value0 << endl;
     char value[MAX_ATTRLENGTH];
     appendNullbit(value, (char*)value0, attrLength);
     // 若找到返回0
     int v = _root;
     while (v != NULL_NODE) {
+        cout << "v " << v << endl;
         BTNode node_v = loadNode(v);
         int len = node_v.getDataSize();
+        cout << "data size " << len << endl;
         if (node_v.isLeaf()) {
             // 只有这里返回
             node_v.getData(0, data_global, rid_global);
+            cout << *(int*)data_global << endl;
             if (BTNode::comp((char*)value, data_global) <= 0) {
                 pageID = node_v.pageID;
-                rank = 0;
+                rank = -1;
                 return;
             }
             int l = 0, r = len - 1;
@@ -757,10 +765,10 @@ int IX_IndexScan::OpenScan(IX_IndexHandle &indexHandle, CompOp compOp, void *val
     this->indexHandle = &indexHandle;
     attrLength = indexHandle.attrLength;
     attrType = indexHandle.headPage.getType();
-    current_value = new char[attrLength];
+    current_value = new char[attrLength + 1];
     if (value == NULL) {
         if (compOp == EQ_OP || compOp == NE_OP) {
-
+            cout << "空值遍历索引\n";
         } else {
             cout << "IX_IndexScan::OpenScan 空值只能使用EQ或者NE\n";
             return -1;
@@ -776,9 +784,11 @@ int IX_IndexScan::OpenScan(IX_IndexHandle &indexHandle, CompOp compOp, void *val
 }
 int IX_IndexScan::tryLoadNext(BTNode& node, int& rank, char* data, RID& rid) {
     // rank有可能已经改变
-    while (node.getNextData(rank, data, rid)) {
+    // 查找直到有大于rank的条目
+    
+    while (node.getNextData(rank, data, rid) != 0) { // 当前结点没有下一条
         int next = indexHandle->loadNextNode(node);
-        if (next != NULL_NODE) {
+        if (next != NULL_NODE) { // 右结点存在
             rank = -1;
             node = indexHandle->loadNode(next);
         } else {
@@ -791,27 +801,30 @@ int IX_IndexScan::tryLoadNext(BTNode& node, int& rank, char* data, RID& rid) {
 int IX_IndexScan::findNext(RID& rid) {
     // 若非第一次获取，则需要判断是否大于之前获取的值
     // 返回0表示获取成功。需要记录此时的值
-    while (tryLoadNext(node_current, rank, data_global, rid_global) == 0) {
+    while (tryLoadNext(node_current, rank, data_global, rid_global) == 0) { // 读下一条记录
         bool satisfied;
         if (value == NULL) {
+            // 查找空值
             assert(compOp == EQ_OP || compOp == NE_OP);
             if (compOp == EQ_OP) {
                 // 为null
                 satisfied = (data_global[attrLength] == 0);
             } else {
-                // 为非null
+                // 非null
                 satisfied = (data_global[attrLength] == 1);
             }
         } else {
+            // 非空查找
             satisfied = comparator(data_global, value, attrType, attrLength);
         }
+        cout << "查找下一条" << rank << endl;
         if (satisfied) {
             // 满足过滤条件
             if (numScanned == 0) {
                 rid.copy(rid_global);
                 numScanned++;
                 current_RID.copy(rid_global);
-                memcpy(current_value, data_global, attrLength);
+                memcpy(current_value, data_global, attrLength + 1); // todo
                 return 0;
             } else {
                 if (BTNode::comp(data_global, rid_global, (char*)current_value, current_RID) > 0) {
@@ -819,7 +832,7 @@ int IX_IndexScan::findNext(RID& rid) {
                     rid.copy(rid_global);
                     numScanned++;
                     current_RID.copy(rid_global);
-                    memcpy(current_value, data_global, attrLength);
+                    memcpy(current_value, data_global, attrLength + 1); // todo
                     return 0;
                 }
             }
@@ -831,6 +844,7 @@ int IX_IndexScan::GetNextEntry(RID &rid) {
     // 为了允许删除，插入操作，不能只记录rank，要记录上次查询的rid
     bool shouldReset = false;
     if (numScanned > 0) {
+        cout << "检查删除\n";
         node_current.getData(rank, data_global, rid_global);
         if (RID::comp(current_RID, rid_global) != 0) {
             // 执行了删除操作，重置指针
@@ -839,6 +853,7 @@ int IX_IndexScan::GetNextEntry(RID &rid) {
     }
     if (numScanned > 0 && !shouldReset) {
         // 没有插入、删除操作
+        cout << "不是第一次，也没有变动\n";
         return findNext(rid);
     } else if (numScanned == 0) {
         // 第一次扫描
@@ -846,7 +861,9 @@ int IX_IndexScan::GetNextEntry(RID &rid) {
             // 找到最后一个小于value的位置
             int pageID;
             indexHandle->findFirstValue(value, pageID, rank);
+            cout << "初始化" << pageID << "," << rank << endl;
             node_current = indexHandle->loadNode(pageID);
+            cout << node_current.pageID << "结点条数:" << *node_current.entry_count <<endl;
             return findNext(rid);
         } else if (compOp == CompOp::LT_OP || compOp == CompOp::LE_OP) {
             // 找到第一个结点
@@ -899,6 +916,9 @@ void IX_IndexHandle::removeLeafLink(BTNode& node) {
         BTNode right_node = loadNode(rightBro);
         *right_node.left = leftBro;
     }
+}
+BTNode::~BTNode() {
+    bufPageManager->writeBack(bufIndex);
 }
 void BTNode::print() const {
     Debug::debug("当前结点 [pageID:%d,parent:%d,entry_count:%d,prev_free:%d,next_free:%d] %s叶子结点",\
@@ -1068,6 +1088,7 @@ void BTNode::removeData(int rank) {
     for (int i = rank; i < *entry_count - 1; i++) {
         rids[i].copy(rids[i + 1]);
     }
+    cout << "改变:removeData\n";
     *entry_count-=1;
     markDirty();
 }
@@ -1075,9 +1096,13 @@ void BTNode::getData(int rank, char* data, RID& rid) const{
     // 拓展型
     if (rank < 0 || rank >= *entry_count) {
         Debug::error("getData range exceeds %d, %d", rank, *entry_count);
+        cout << pageID << endl;
+        print();
+        while (1) {
+
+        }
         return;
     }
-    assert(data != NULL);
     int actualLen = attrLength + 1;
     char* value = values + rank * actualLen;
     memcpy(data, value, actualLen);
@@ -1090,6 +1115,7 @@ void BTNode::insertData(int rank, char* data, const RID& rid) {
         Debug::error("insertData rank [%d, %d]", rank, *entry_count);
         return;
     }
+    cout << "插入数据" << *(int*)data << endl;
     assert(data != NULL);
     markDirty();
     int actualLen = attrLength + 1;
@@ -1100,9 +1126,10 @@ void BTNode::insertData(int rank, char* data, const RID& rid) {
         rids[i].copy(rids[i - 1]);
     }
     char *value = values + rank * actualLen;
-    memset(value, 0, actualLen);
+    memcpy(value, data, actualLen);
     rids[rank].copy(rid);
     *entry_count+=1;
+    cout << "改变:insertData\n";
 }
 void BTNode::removeData(int rank, char* data, RID& rid) {
     // 拓展型
@@ -1123,6 +1150,7 @@ void BTNode::removeData(int rank, char* data, RID& rid) {
         rids[i].copy(rids[i + 1]);
     }
     *entry_count-=1;
+    cout << "改变:removeData\n";
 }
 int BTNode::removeChild(int rank) {
     if (rank < 0 || rank >= *child_count) {
@@ -1169,8 +1197,8 @@ int BTNode::getChild(int child) const{
     return NULL_NODE;
 }
 int BTNode::getNextData(int& rank, char* data, RID& rid) const {
-    // 获取rank+1的数据
-    if (rank + 1 == *entry_count) {
+    // 获取大于rank的数据
+    if (rank + 1 >= *entry_count) {
         return -1;
     }
     getData(++rank, data, rid);
@@ -1208,6 +1236,7 @@ void BTNode::withEmptyPage(BufType b, Head_Page headPage, int pID, int index) {
     *right = NULL_NODE;
     *prev_free = NULL_NODE;
     *next_free = NULL_NODE;
+    cout << "改变:withEmpty\n";
     *entry_count = 0;
     *child_count = 0;
     *is_leaf = 0;

@@ -107,6 +107,8 @@ int get_id(char *s) {
         return yylval.ival = TOKEN_FOREIGN;
     } else if (match("references")) {
         return yylval.ival = TOKEN_REFERENCES;
+    } else if (match("exit")) {
+        return yylval.ival = TOKEN_EXIT;
     } else {
         yylval.sval = mk_string(s, i);
         return TOKEN_STRING_IDENTIFIER;

@@ -460,7 +460,6 @@ int QL_Manager::Insert(const char *tableName, parser_node *value) {
                 memcpy(ipos, varchar, attr->attrLenth);
                 break;
         }
-
     }
     RID rid;
     if (fileHandle.insertRec(ValueData, rid) != 0) {
@@ -495,6 +494,56 @@ ConditionInfo *guessBestCond(ConditionInfo *conditions, int count, AttributeEntr
     // 排除同等关系和字段比较
     // 有index的属性是主键
     // 主键 与非空值比较 空值
+    ConditionInfo *indexnotnull = NULL, *indexnull = NULL;
+    bool hasIndex, isPrimary, notNull;
+    AttributeEntry *attribute = NULL, *attrnotnull, *attrnull;
+    for (int i = 0; i < count; ++i) {
+        if (conditions[i].type == ql_NormalCond && conditions[i].cond.normalcond.tb1 >= 0 && conditions[i].cond.normalcond.tb2 >= 0) {
+            // 排除同等关系和字段比较
+            continue;
+        }
+        switch (conditions[i].type) {
+            case ql_NormalCond:
+                // 非空
+                notNull = true;
+                if (conditions[i].cond.normalcond.tb1 >= 0) {
+                    // lh 为属性
+                    attribute = &(conditions[i].cond.normalcond.attr1);
+                } else {
+                    // rh 为属性 不可能
+                    attribute = &(conditions[i].cond.normalcond.attr2);
+                }
+                hasIndex = (attribute->indexNo != -1);
+                isPrimary = attribute->isPrimarykey;
+                break;
+            case ql_NotnullCond:
+            case ql_NullCond:
+                notNull = false;
+                attribute = &(conditions[i].cond.nullcond.attr);
+                hasIndex = (attribute->indexNo != -1);
+                isPrimary = attribute->isPrimarykey;
+                break;
+        }
+        if (hasIndex && isPrimary) {
+            dst = attribute;
+            return &conditions[i];
+        } else if (hasIndex && notNull) {
+            indexnotnull = &conditions[i];
+            attrnotnull = attribute;
+        } else if (hasIndex) {
+            indexnull = &conditions[i];
+            attrnull = attribute;
+        }
+    }
+    if (indexnotnull != NULL) {
+        dst = attrnotnull;
+        return indexnotnull;
+    } else {
+        dst = attrnull;
+        return indexnull;
+    }
+}
+ConditionInfo *findCondWithIndex(ConditionInfo *conditions, int count, AttributeEntry *&dst) {
     ConditionInfo *indexnotnull = NULL, *indexnull = NULL;
     bool hasIndex, isPrimary, notNull;
     AttributeEntry *attribute = NULL, *attrnotnull, *attrnull;
@@ -601,16 +650,18 @@ int getSelectorNum(parser_node *selector) {
     return r;
 }
 int getAttrNum(char *tbName) {
+    // 统计表tbName的属性数目
     assert(gl_systemManager->usingDb);
-    int r = 0;
     RecordScan scan;
-    if (scan.openScan(gl_systemManager->relationHandle, STRING, MAX_RELNAME_LENGTH, OFFSETOF(RelationEntry, relName), EQ_OP, tbName) != 0) {
+    if (scan.openScan(gl_systemManager->attrHandle, STRING, MAX_RELNAME_LENGTH, OFFSETOF(AttributeEntry, relName), EQ_OP, tbName) != 0) {
         return -1;
     }
     Record record;
+    int r = 0;
     while (scan.getNextRec(record) == 0) {
         r++;
     }
+    cout << "表" << tbName << "的属性数为" << r << endl;
     return r;
 }
 int constructColInfo(ColInfo *infos, int n, parser_node *selector, char *tbName, char *tbNames[], int tbcount) {
@@ -646,7 +697,7 @@ int constructColInfo(ColInfo *infos, int n, parser_node *selector, char *tbName,
     return 0;
 }
 int constructColInfo(ColInfo *infos, int n, char *tbNames[], int tbcount) {
-    // selector=*
+    // selector is *
     int pos = 0;
     for (int i = 0; i < tbcount; ++i) {
         RecordScan scan;
@@ -664,7 +715,7 @@ int constructColInfo(ColInfo *infos, int n, char *tbNames[], int tbcount) {
     }
     return 0;
 }
-void printColInfos(ostream &o, ColInfo *cols, int colNum, Record *r) {
+void printColHead(ostream &o, ColInfo *cols, int colNum) {
     for (int i = 0; i < colNum; ++i) {
         o << cols[i].colName;
         if (i != colNum - 1) {
@@ -672,9 +723,12 @@ void printColInfos(ostream &o, ColInfo *cols, int colNum, Record *r) {
         }
     }
     o << endl;
+}
+void printColInfos(ostream &o, ColInfo *cols, int colNum, Record *r) {
     for (int i = 0; i < colNum; ++i) {
         cols[i].print(r, o);
     }
+    o << endl;
 }
 int QL_Manager::Select(parser_node *selector, parser_node *tables, parser_node *whereClause) {
     // 分类:单表查询、多表join
@@ -735,6 +789,7 @@ int QL_Manager::Select(parser_node *selector, parser_node *tables, parser_node *
     }
     ColInfo printCols[selectNum];
     if (selectAll) {
+        cout << "选择列为'*',计算出实际列数:" << selectNum << endl;
         if (constructColInfo(printCols, selectNum, tbNames, tablecount) != 0) {
             cout << "构造selector列信息失败\n";
             return -1;
@@ -759,10 +814,12 @@ int QL_Manager::Select(parser_node *selector, parser_node *tables, parser_node *
         ConditionInfo *best_cond = guessBestCond(conditions, conditioncount, best_attr);
         if (best_cond) {
             // index
+            cout << "最佳筛选条件:" << best_attr->attrName << endl;
             IX_IndexHandle indexhandle;
             if (gl_indexingManager->OpenIndex(tbName, best_attr->indexNo, indexhandle) != 0) {
                 return -1;
             }
+            indexhandle.printHeadPage();
             IX_IndexScan scan;
             if (openScanByCondition(best_cond, &indexhandle, &scan) != 0) {
                 return -1;
@@ -772,8 +829,13 @@ int QL_Manager::Select(parser_node *selector, parser_node *tables, parser_node *
             if (gl_recordManager->openFile(tbName, recordhandle) != 0) {
                 return -1;
             }
+            printColHead(cout, printCols, selectNum);
             while (scan.GetNextEntry(rid) == 0) {
-                recordhandle.getRec(rid, records[0]);
+                cout << "索引找到一条记录\n";
+                if (recordhandle.getRec(rid, records[0]) != 0) {
+                    cout << "读取失败\n";
+                    return -1;
+                }
                 if (checkSatisfiedCond(records, conditions, conditioncount)) {
                     // print it
                     printColInfos(cout, printCols, selectNum, records);
@@ -788,6 +850,7 @@ int QL_Manager::Select(parser_node *selector, parser_node *tables, parser_node *
             if (scan.openScan(recordhandle, STRING, 0, 0, NO_OP, NULL) != 0) {
                 return -1;
             }
+            printColHead(cout, printCols, selectNum);
             while (scan.getNextRec(records[0]) == 0) {
                 if (checkSatisfiedCond(records, conditions, conditioncount)) {
                     // print it
@@ -796,7 +859,8 @@ int QL_Manager::Select(parser_node *selector, parser_node *tables, parser_node *
             }
         }
     } else {
-        // 多表连接 只需要考虑两个表
+        // 多表连接
+        // 找一个具有index的属性
     }
     return 0;
 }

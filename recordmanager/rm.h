@@ -111,7 +111,6 @@ public:
 	}
 	static int getNext(int least, char *bm, bool used, int bmsize) {
 		// 获取下一个
-		cout << bmsize << endl;
 		for (int i = least + 1; i < bmsize; ++i) {
 			if (getBitmap(bm, i) == used)
 				return i;

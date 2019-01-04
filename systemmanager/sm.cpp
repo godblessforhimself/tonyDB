@@ -222,7 +222,6 @@ int SM_Manager::createTable(const char *tbName, parser_node *fieldList) {
                         type = iter->u.Field.v.normal.type;
                         typeLen = (type->u.ATTRTYPE.type == STRING) ? type->u.ATTRTYPE.len : constSpace::getattrlength(type->u.ATTRTYPE.type);
                         entrys[attrCount].offset = offset;
-                        cout << iter->u.Field.v.normal.colname << "normal\n";
                         offset += typeLen;
                         strncpy(entrys[attrCount].relName, tbName, MAX_RELNAME_LENGTH);
                         setNormal(&entrys[attrCount++], iter);
@@ -232,7 +231,6 @@ int SM_Manager::createTable(const char *tbName, parser_node *fieldList) {
                         typeLen = (type->u.ATTRTYPE.type == STRING) ? type->u.ATTRTYPE.len : constSpace::getattrlength(type->u.ATTRTYPE.type);
                         entrys[attrCount].offset = offset;
                         offset += typeLen;
-                        cout << iter->u.Field.v.notnull.colname << "notnull\n";
                         strncpy(entrys[attrCount].relName, tbName, MAX_RELNAME_LENGTH);
                         setNotnull(&entrys[attrCount++], iter);
                         break;
@@ -267,62 +265,89 @@ int SM_Manager::createTable(const char *tbName, parser_node *fieldList) {
     attrHandle.forceDisk();
     return 0;
 }
-int SM_Manager::createIndex(const char *relName, const char *attrName) {
+int SM_Manager::createIndex(const char *table, const char *attrName) {
     // 为属性创建索引
     // 只要维护 RelationEntry.indexCount AttributeEntry.indexNo 
     // 并创建索引即可
     // 隐藏问题，有可能已经存在索引
     RecordScan recordScan;
-    if (recordScan.openScan(relationHandle, STRING, MAX_RELNAME_LENGTH, 0, EQ_OP, (void*)relName)) {
+    if (recordScan.openScan(relationHandle, STRING, MAX_RELNAME_LENGTH, 0, EQ_OP, (void*)table)) {
         Debug::debug("SM_Manager::createIndex recordScan.openScan fail!");
         return -1;
     }
     // 查询关系表
-    Record record_relation, record_attribute;
-    int countRelation = 0;
-    RID rid_relation, rid_attribute;
+    Record record;
     // 查找relation
-    while (!recordScan.getNextRec(record_relation)) {
-        countRelation++;
-        rid_relation.copy(record_relation.getRID());
+    if (recordScan.getNextRec(record) != 0) {
+        cout << "找不到表" << table << endl;
+        return -1;
     }
-    if (countRelation != 1) {
-        Debug::debug("SM_Manager::createIndex countRelation:%d", countRelation);
+    RelationEntry *tbinfo = (RelationEntry*)record.getData();
+    int count = tbinfo->indexCount;
+    int tupleLength = tbinfo->tupleLength;
+    tbinfo->indexCount++;
+    if (relationHandle.updateRec(record) == false) {
+        cout << "更新表的indexcount失败\n";
         return -1;
     }
     // 查找attribute
-    countRelation = 0;
-    if (recordScan.openScan(attrHandle, STRING, MAX_ATTRNAME_LENGTH, MAX_RELNAME_LENGTH, EQ_OP, (void*)attrName)) {
-        Debug::debug("SM_Manager::createIndex recordScan.openScan fail!");
+    RecordScan scan;
+    if (scan.openScan(attrHandle, STRING, MAX_ATTRNAME_LENGTH, OFFSETOF(AttributeEntry, relName), EQ_OP, (void*)table) != 0) {
+        Debug::debug("SM_Manager::createIndex 打不开", attrName);
         return -1;
     }
-    while (!recordScan.getNextRec(record_attribute)) {
-        countRelation++;
-        rid_attribute.copy(record_attribute.getRID());
+    int attrindex = 0; // 属性的下标
+    while (scan.getNextRec(record) == 0) {
+        AttributeEntry *attrinfo = (AttributeEntry*)record.getData();
+        if (strncmp(attrinfo->attrName, attrName, MAX_ATTRNAME_LENGTH) == 0) {
+            if (attrinfo->indexNo >= 0) {
+                cout << "不能创建已有索引\n";
+                return -1;
+            }
+            int realLen = (attrinfo->attrType == STRING) ? attrinfo->attrLenth : getattrlength(attrinfo->attrType);
+            if (indexingManager->CreateIndex(table, count, attrinfo->attrType, realLen) != 0) {
+                cout << "创建索引失败\n";
+                return -1;
+            }
+            attrinfo->indexNo = count;
+            attrHandle.updateRec(record);
+            IX_IndexHandle handle;
+            if (indexingManager->OpenIndex(table, count, handle) != 0) {
+                cout << "插入索引失败\n";
+                return -1;
+            }
+            RecordHandle fileHandle;
+            if (recordManager->openFile(table, fileHandle) != 0) {
+                cout << "打不开文件" << table << endl;
+                return -1;
+            }
+            RecordScan fileScan;
+            if (fileScan.openScan(fileHandle, STRING, 0, 0, NO_OP, NULL) != 0) {
+                cout << "打不开scan\n";
+                return -1;
+            }
+            Record rc;
+            while (fileScan.getNextRec(rc) == 0) {
+                char *data = rc.getData();
+                char *bm = data + tupleLength;
+                int isNull = getBitmap(attrindex, (void*)bm);
+                void *pData;
+                if (isNull == 1) 
+                    pData = NULL;
+                else
+                    pData = data + attrinfo->offset;
+                if (handle.InsertEntry(pData, rc.getRID()) != 0) {
+                    cout << "插入索引值失败\n";
+                    return -1;
+                }
+            }
+            relationHandle.forceDisk();
+            attrHandle.forceDisk();
+            return 0;
+        }
+        attrindex ++;
     }
-    if (countRelation != 1) {
-        Debug::debug("SM_Manager::createIndex countRelation:%d", countRelation);
-        return -1;
-    }
-    // 根据rid获取record
-    relationHandle.getRec(rid_relation, record_relation);
-    RelationEntry* relation = (RelationEntry*)record_relation.getData();
-    AttributeEntry* attribute = (AttributeEntry*)record_attribute.getData();
-    int currentIndex = relation->indexCount;
-    indexingManager->CreateIndex(relName, currentIndex, attribute->attrType, attribute->attrLenth);
-    attribute->indexNo = currentIndex;
-    relation->indexCount++;
-    if (!relationHandle.updateRec(record_relation)) {
-        Debug::debug("SM_Manager::createIndex relationHandle.updateRec fail!");
-        return -1;
-    }
-    if (!attrHandle.updateRec(record_attribute)) {
-        Debug::debug("SM_Manager::createIndex attrHandle.updateRec fail!");
-        return -1;
-    }
-    relationHandle.forceDisk();
-    attrHandle.forceDisk();
-    return 0;
+    return -1;
 }
 int SM_Manager::dropTable(const char *relname) {
     // 删除RelationEntry里的relName
@@ -351,29 +376,31 @@ int SM_Manager::dropIndex(const char *relname, const char *attrname) {
     // 检查index是否存在
     // 维护 RelationEntry.indexCount AttributeEntry.indexNo 
     // 删除index文件
-    char concatName[MAX_ATTRNAME_LENGTH + MAX_RELNAME_LENGTH];
-    memcpy(concatName, relname, MAX_RELNAME_LENGTH);
-    memcpy(concatName + MAX_RELNAME_LENGTH, attrname, MAX_ATTRNAME_LENGTH);
-    RecordScan attributeScan;
-    attributeScan.openScan(attrHandle, STRING, MAX_ATTRNAME_LENGTH + MAX_RELNAME_LENGTH, OFFSETOF(AttributeEntry, relName), EQ_OP, (void*)concatName);
-    Record attributeRec;
-    while (attributeScan.getNextRec(attributeRec) == 0) {
-        AttributeEntry* entry = (AttributeEntry*)attributeRec.getData();
-        int index = entry->indexNo;
-        if (index >= 0) {
-            indexingManager->DestroyIndex(relname, index);
+    RecordScan scan;
+    if (scan.openScan(attrHandle, STRING, MAX_ATTRNAME_LENGTH, OFFSETOF(AttributeEntry, relName), EQ_OP, (void*)relname) != 0) {
+        cout << "无法打开属性文件\n";
+        return -1;
+    }
+    Record record;
+    while (scan.getNextRec(record) == 0) {
+        AttributeEntry *attrinfo = (AttributeEntry*)record.getData();
+        if (strncmp(attrinfo->attrName, attrname, MAX_ATTRNAME_LENGTH) == 0) {
+            int index = attrinfo->indexNo;
+            if (index < 0) {
+                cout << "索引不存在\n";
+                return -1;
+            }
+            attrinfo->indexNo = -1;
+            if (attrHandle.updateRec(record) == false) {
+                cout << "更新索引失败\n";
+                return -1;
+            }
+            if (indexingManager->DestroyIndex(relname, index) != 0) {
+                cout << "删除索引失败\n";
+                return -1;
+            }
+            return 0;
         }
-        entry->indexNo = -1;
-        attrHandle.updateRec(attributeRec);
     }
-
-    RecordScan relationScan;
-    relationScan.openScan(relationHandle, STRING, MAX_RELNAME_LENGTH, OFFSETOF(RelationEntry, relName), EQ_OP, (void*)relname);
-    Record relationRec;
-    while (relationScan.getNextRec(relationRec) == 0) {
-        RelationEntry* relation = (RelationEntry*)relationRec.getData();
-        relation->indexCount--;
-        relationHandle.updateRec(relationRec);
-    }
-    return 0;
+    return -1;
 }

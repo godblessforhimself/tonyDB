@@ -6,6 +6,10 @@
         int yywrap(void);
         extern int yylex(void);
     }
+    int exit_flag = 0;
+#ifndef yyrestart
+    void yyrestart(FILE*);
+#endif
 %}
 %token <ival> TOKEN_CREATE
         TOKEN_DATABASE
@@ -44,6 +48,7 @@
         OP_GE
         OP_EQ
         OP_NE
+        TOKEN_EXIT
 
 %token <sval> TOKEN_STRING_IDENTIFIER SYS_COMMAND VALUE_STRING
 %token <ival> VALUE_INT
@@ -61,6 +66,11 @@ program: stmt
             // !执行系统命令
             reset_ptr();
             system($1);
+            YYACCEPT;
+        }
+    |   TOKEN_EXIT
+        {
+            exit_flag = 1;
             YYACCEPT;
         }
     ;
@@ -178,10 +188,16 @@ tbStmt: TOKEN_DROP TOKEN_TABLE tbName
 idxStmt: TOKEN_CREATE TOKEN_INDEX tbName '(' colName ')'
         {
             // 当前数据库的tbName表的colName建立索引 create index tbName (colName)
+            if (gl_systemManager->createIndex($3, $5) != 0) {
+                cout << "创建索引" << $3 << "." << $5 << "失败\n";
+            }
         }
     |   TOKEN_DROP TOKEN_INDEX tbName '(' colName ')'
         {
             // 删除索引
+            if (gl_systemManager->dropIndex($3, $5) != 0) {
+                cout << "删除索引" << $3 << "." << $5 << "失败\n";
+            }
         }
     ;
 fieldList: field
@@ -450,16 +466,19 @@ colName: TOKEN_STRING_IDENTIFIER
 %%
 
 void yyerror(char *s) {
+    cout << s << endl;
 }
-int yywrap(void)
-{
+int yywrap(void) {
    return 1;
 }
 void runParser() {
     yydebug = 0;
     while (1) {
-        printf("> ");
+        cout << "> " << std::flush;
         yyparse();
+        if (exit_flag) 
+            break;
+        yyrestart(stdin);
     }
     return;
 }
