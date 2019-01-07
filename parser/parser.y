@@ -288,7 +288,7 @@ insert: TOKEN_INSERT TOKEN_INTO tbName TOKEN_VALUES '(' valueList ')'
                 // return -1;
             }
             insertcount++;
-            if (insertcount % 1000 == 0) {
+            if (insertcount % 10000 == 0) {
                 double second = tickTock.tock();
                 cout << "插入" << insertcount << "条,花去时间" << second * 1000 << "ms\n";
             }

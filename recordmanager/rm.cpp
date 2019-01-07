@@ -177,7 +177,7 @@ bool RecordHandle::deleteRec(const RID &rid) {
 	}
 	assert((page < fileHeader.pageNum) && (slot < fileHeader.recordNum));
 	// find the page 
-	cout << fileID << " ," <<  page << endl;
+	// cout << fileID << " ," <<  page << endl;
 	BufType b = bufPageManager->getPage(fileID, page, index), temp;
 	// check if bitmap[slot] is true 
 	if (PageReader::getBitmap(b, fileHeader.bitmapStart, slot)) {

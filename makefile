@@ -42,7 +42,7 @@ parser: $(PARSER_SOURCES)
 	g++ -c parser/lex.yy.c -o build/lex.o
 	g++ $(CFLAGS) -c parser/y.tab.c -o build/parser.o
 	g++ $(CFLAGS) -c parser/parser_helper.cpp -o build/parser_h.o
-	#rm parser/y.tab.h parser/y.tab.c parser/lex.yy.c
+	rm parser/y.tab.h parser/y.tab.c parser/lex.yy.c
 
 clean: 
 	echo "clean"

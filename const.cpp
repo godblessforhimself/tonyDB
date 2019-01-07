@@ -329,7 +329,9 @@ int getBitmap(int position, void* src) {
 	int bigpos = position >> 3;
 	int offset = position % 8;
 	char that = *((char*)src + bigpos);
-	return (that & (1 << offset));
+	if ((that & (1 << offset))) 
+		return 1;
+	return 0;
 }
 void TickTock::tick() {
 	// 记录当前时间

@@ -61,7 +61,7 @@ void ColInfo::print(Record *r, ostream &o) {
     char temp[length + 1];
     temp[length] = 0;
     Record *vRecord = &r[tableIndex];
-    char *bm = (char*)vRecord->getData() + bmoffset;
+    char *bm = vRecord->getData() + bmoffset;
     bool isNull = (getBitmap(attrIndex, bm) == NULL_BIT_VALUE);
     if (isNull) {
         o << "null";

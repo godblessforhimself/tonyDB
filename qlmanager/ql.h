@@ -72,7 +72,5 @@ public:
     int Select(parser_node *selector, parser_node *tables, parser_node *whereClause);
     int Delete(char *tbName, parser_node *whereClause);
     int Update(char *tbName, parser_node *setClause, parser_node *whereClause);
-private:
-    
 };
 #endif

@@ -26,7 +26,6 @@ va_start(args, format);\
 vprintf(format, args);\
 va_end(args);\
 printf("\n")
-unsigned long timediff(timeval start, timeval end);
 namespace constSpace {
 	const char attributeCatalogName[] = "attrcat";
 	const char relationCatalogName[] = "relcat";
