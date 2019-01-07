@@ -217,6 +217,9 @@ public:
 	int openScan(RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value);
 	int getNextRec(Record& record);  
 	bool closeScan();
+	void reset() {
+		scanPage = scanSlot = -1;
+	}
 private:
 	RecordHandle *recordHandle;
 	constSpace::AttrType attrType;

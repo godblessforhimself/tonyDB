@@ -1,6 +1,7 @@
 #ifndef INDEXING_H
 #define INDEXING_H
 #include "../const.h"
+// 约定非叶子结点存叶子结点里的最小值
 using namespace constSpace;
 class IX_IndexHandle;
 class BTree;
@@ -29,6 +30,7 @@ struct BTNode {
     static AttrType attrType;
     static BufPageManager* bufPageManager;
     int pageID, bufIndex;
+    bool inited;
     BTNode();
     BTNode(BufPageManager* bufPageManager);
     ~BTNode();
@@ -89,12 +91,11 @@ class IX_IndexHandle {
     IX_IndexHandle();                             // Constructor
     ~IX_IndexHandle();                             // Destructor
     int InsertEntry(void *pData, const RID &rid);  // 原型
-    int InsertNull(const RID &rid);
     int DeleteEntry(void *pData, const RID &rid);  // Delete index entry
     //int SearchEntry(void *pData, RID& rid, bool compare); // 搜索大于pData rid并更新
     int ForcePages();                             // Copy index to disk
-    BTNode loadNode(int id);
-    BTNode loadFirstLeaf();
+    void loadNode(BTNode&, int id);
+    void loadFirstLeaf(BTNode&);
     int loadNextNode(BTNode& node);
 private:
     int _hot; int attrLength;
@@ -107,7 +108,7 @@ private:
     void updateToRoot(int v);
     void solveOverflow(BTNode&);
     void solveUnderflow(BTNode&);
-    BTNode createNode();
+    void createNode(BTNode&);
     void removeLeafLink(BTNode& node);
     void addLeafLinkAfter(BTNode& node_v, BTNode& node_after);
     //int searchEntryRecur(int v, void *pData, RID& rid);
@@ -122,9 +123,9 @@ private:
     AttrType attrType; CompOp compOp; 
     int attrLength, numScanned;
     bool(*comparator)(void *, void *, AttrType, int);
-    IX_IndexHandle* indexHandle;
     BTNode node_current;
 public:
+    IX_IndexHandle* indexHandle;
 	IX_IndexScan();                                 // Constructor
     ~IX_IndexScan();                                 // Destructor
     int OpenScan(IX_IndexHandle &indexHandle, CompOp compOp, void *value);   // value = NULL 时， compOp只能为EQ NE        

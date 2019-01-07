@@ -53,9 +53,9 @@ void Head_Page::parse(BufType b) {
     right = ptr->right;
 }
 void printHead(Head_Page head) {
-    Debug::debug("printHead: 属性 %s, 长度 %d, 最多条目 %d, 页数 %d, 根下标 %d, 下一个空闲页 %d, 条目数量 %d", \
+    printf("printHead: 属性 %s, 长度 %d, 最多条目 %d, 页数 %d, 根下标 %d, 下一个空闲页 %d, 条目数量 %d\n", \
         head.attrType, head.attrLength, head.entryLimit, head.pageNum, head.root, head.nextFree, head.entryNum);
-       
+    cout << "右叶子" << head.right << endl;
 }
 void forcePage(BufPageManager* bufPageManager, int index) {
     // 将修改过的页面写回并释放
@@ -145,13 +145,15 @@ int IX_Manager::OpenIndex(const char *fileName, int indexNo, IX_IndexHandle &ind
 }
 /* IX_IndexHandle implement */
 void IX_IndexHandle::printFreeLink() {
-    Debug::debugL("[0]->");
+    printf("空闲页:[0]->");
     int next = headPage.nextFree;
     while (next != headPage.pageNum) {
-        Debug::debugL("[%d]->", next);    
-        next = *(loadNode(next).next_free);
+        printf("[%d]->", next);
+        BTNode temp;
+        loadNode(temp, next);   //下次循环会自动释放
+        next = *(temp.next_free);
     }
-    Debug::debugL("[%d]\n", next);
+    printf("[%d]\n", next);
 }
 void IX_IndexHandle::init(int fileID, BufType b, IX_Manager* ix_manager) {
     headPage.parse(b);
@@ -220,9 +222,6 @@ int IX_IndexHandle::SearchEntry(void *pData, RID& rid, bool compare) {
         }
     }
 }*/
-int IX_IndexHandle::InsertNull(const RID &rid) {
-    return 0;
-}
 int IX_IndexHandle::InsertEntry(void *pData, const RID &rid) {
     if (!insert((char*)pData, rid)) {
         Debug::error("InsertEntry already exist!");
@@ -255,21 +254,25 @@ int BTNode::getParentRank(const BTNode& son, const BTNode& parent) {
     while (parent.getChild(r) != son.pageID) r++;
     return r;
 }
-BTNode IX_IndexHandle::loadNode(int pID) {
+void IX_IndexHandle::loadNode(BTNode &node, int pID) {
+    // 会导致node的一次释放
+    // cout << "结点" << pID << "被加载\n";
     int index;
     BufType b = bufPageManager->getPage(fileID, pID, index);
-    BTNode node(bufPageManager);
+    if (BTNode::bufPageManager == NULL)
+        BTNode::bufPageManager = bufPageManager;
     node.withContentPage(b, headPage, pID, index);
-    return node;
+    return;
 }
-BTNode IX_IndexHandle::createNode() {
+void IX_IndexHandle::createNode(BTNode &node) {
     // 通过空闲链表找到pageID,初始化新结点,更新链表,修改页数
     // createNode的结点必须写回
     int index;
     int nextFree = headPage.nextFree;
     BufType b = bufPageManager->getPage(fileID, nextFree, index);
     bufPageManager->markDirty(index);
-    BTNode node(bufPageManager);
+    if (BTNode::bufPageManager == NULL)
+        BTNode::bufPageManager = bufPageManager;
     node.withContentPage(b, headPage, nextFree, index);
     removeLink(node);
     *node.parent = NULL_NODE;
@@ -283,7 +286,7 @@ BTNode IX_IndexHandle::createNode() {
     *node.is_leaf = 0;
     if (nextFree == headPage.pageNum) 
         headPage.pageNum++;
-    return node;
+    return;
 }
 int IX_IndexHandle::search(char* e1, const RID& rid) {
     // 原型
@@ -296,7 +299,8 @@ int IX_IndexHandle::search(char* e1, const RID& rid) {
     //Debug::debug("IX_IndexHandle::search _root is %d", _root);
     int v = _root; _hot = _root;
     while (v != NULL_NODE) {
-        BTNode node_v = loadNode(v);
+        BTNode node_v;
+        loadNode(node_v, v);
         int rank = node_v.search(e, rid);
         if (!node_v.isLeaf()) {
             // 非叶子结点
@@ -326,7 +330,8 @@ bool IX_IndexHandle::remove(char* e, const RID& rid_in) {
     int v = search(e, rid_in);
     Debug::print(Debug::BTREE_REMOVE, "IX_IndexHandle::remove 删除的结点pageID:%d", v);
     if (v == NULL_NODE) return false;
-    BTNode node_v = loadNode(v);
+    BTNode node_v;
+    loadNode(node_v, v);
     char e1[MAX_ATTRLENGTH];
     appendNullbit(e1, e, attrLength);
     int r = node_v.search(e1, rid_in); // 拓展型
@@ -347,10 +352,11 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
         do {
             if (p == NULL_NODE)
                 return;
-            BTNode node_parent = loadNode(p);
+            BTNode node_parent;
+            loadNode(node_parent, p);
             rank = BTNode::getParentRank(node_v, node_parent);
             rank = updateParent(node_v, rank);
-            node_v = loadNode(p);
+            loadNode(node_v, p);
         } while (rank == 0);
         Debug::print(Debug::BTREE_REMOVE, "IX_IndexHandle::solveUnderflow 没有下溢");
         return;
@@ -360,7 +366,8 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
             // 当前结点为根，但是当前结点只有一个孩子
             // 不改变叶子指针
             _root = node_v.getChild(0);
-            BTNode newRoot = loadNode(_root);
+            BTNode newRoot;
+            loadNode(newRoot, _root);
             newRoot.setParent(NULL_NODE);
             addLink(node_v);
             Debug::print(Debug::BTREE_REMOVE, "IX_IndexHandle::solveUnderflow 当前结点为根，但是当前结点只有一个孩子");
@@ -368,13 +375,15 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
         Debug::print(Debug::BTREE_REMOVE, "IX_IndexHandle::solveUnderflow 当前结点为根，结束");
         return;
     }
-    BTNode node_p = loadNode(p);
+    BTNode node_p;
+    loadNode(node_p, p);
     bool leaf = node_v.isLeaf();
     int r = BTNode::getParentRank(node_v, node_p);
     if (r > 0) {
         // 情况1：向左兄弟借关键码
         int ls = node_p.getChild(r - 1);
-        BTNode node_ls = loadNode(ls);
+        BTNode node_ls;
+        loadNode(node_ls, ls);
         if (node_ls.getDataSize() > (_order + 1) / 2) {
             if (leaf) {
                 // 只借出数据项
@@ -390,7 +399,8 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
                 node_v.insertData(0, data_global, rid_global);
                 node_p.setData(r, data_global, rid_global);
                 node_v.insertChild(0, node_ls.removeChild(rightMost));
-                BTNode node_child = loadNode(node_v.getChild(0));
+                BTNode node_child;
+                loadNode(node_child, node_v.getChild(0));
                 node_child.setParent(v);
                 updateToRoot(v);
             }
@@ -401,13 +411,15 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
     if (node_p.getDataSize() - 1 > r) { // 若v不是p的最后一个儿子
         // 情况2：向右兄弟借关键码
         int rs = node_p.getChild(r + 1);
-        BTNode node_rs = loadNode(rs);
+        BTNode node_rs;
+        loadNode(node_rs, rs);
         if (node_rs.getDataSize() > (_order + 1) / 2) {
             int v_size = node_v.getDataSize();
             if (!leaf) {
                 // 孩子
                 node_v.insertChild(v_size, node_rs.removeChild(0));
-                BTNode node_child = loadNode(node_v.getChild(v_size));
+                BTNode node_child;
+                loadNode(node_child, node_v.getChild(v_size));
                 node_child.setParent(v);
             }
             node_rs.removeData(0, data_global, rid_global);
@@ -423,7 +435,8 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
         // 情况3：与左兄弟合并
         // 删除父亲的第r项 更新父亲的r-1项
         int ls = node_p.getChild(r - 1);
-        BTNode node_ls = loadNode(ls);
+        BTNode node_ls;
+        loadNode(node_ls, ls);
         node_p.removeData(r);
         node_p.removeChild(r);
         while (node_v.getDataSize() > 0) {
@@ -432,7 +445,8 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
             if (!leaf) {
                 node_ls.insertChild(node_ls.getChildSize(), node_v.removeChild(0));
                 int child = node_ls.getChild(node_ls.getChildSize() - 1);
-                BTNode node_child = loadNode(child);
+                BTNode node_child;
+                loadNode(node_child, child);
                 node_child.setParent(node_ls.pageID);
             }
         }
@@ -445,7 +459,8 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
         // 情况4：与右兄弟合并
         // 删除父亲第r+1项，更新父亲第r项
         int rs = node_p.getChild(r + 1);
-        BTNode node_rs = loadNode(rs);
+        BTNode node_rs;
+        loadNode(node_rs, rs);
         node_p.removeData(r + 1);
         node_p.removeChild(r + 1);
         while (node_rs.getDataSize() > 0) {
@@ -454,7 +469,8 @@ void IX_IndexHandle::solveUnderflow(BTNode& node_v) {
             if (!leaf) {
                 node_v.insertChild(node_v.getChildSize(), node_rs.removeChild(0));
                 int child = node_v.getChild(node_v.getChildSize() - 1);
-                BTNode node_child = loadNode(child);
+                BTNode node_child;
+                loadNode(node_child, child);
                 node_child.setParent(node_v.pageID);
             }
         }
@@ -478,7 +494,8 @@ bool IX_IndexHandle::insert(char* e, const RID& rid_in) {
     appendNullbit(e1, e, attrLength);
     int v = search(e, rid_in); // 原型
     if (v != NULL_NODE) return false;
-    BTNode node_hot = loadNode(_hot);
+    BTNode node_hot;
+    loadNode(node_hot, _hot);
     int r = node_hot.search(e1, rid_in); // 拓展型
     node_hot.insertData(r, e1, rid_in); // 拓展型
     Debug::print(Debug::BTREE_INSERT, "IX_IndexHandle::insert to %d, rank %d", node_hot.pageID, r);
@@ -497,7 +514,8 @@ int IX_IndexHandle::updateParent(BTNode& node_v) {
     if (parent == NULL_NODE || node_v.getDataSize() == 0) {
         return -1;
     }
-    BTNode node_parent = loadNode(parent);
+    BTNode node_parent;
+    loadNode(node_parent, parent);
     int v = node_v.pageID, r = 0;
     while (node_parent.getChild(r) != v) r++;
     char data_internal[MAX_ATTRLENGTH];
@@ -516,7 +534,8 @@ int IX_IndexHandle::updateParent(BTNode& node_v, int r) {
     if (parent == NULL_NODE || node_v.getDataSize() == 0) {
         return -1;
     }
-    BTNode node_parent = loadNode(parent);
+    BTNode node_parent;
+    loadNode(node_parent, parent);
     char data_internal[MAX_ATTRLENGTH];
     RID rid_internal;
     node_parent.getData(r, data_internal, rid_internal);
@@ -531,10 +550,12 @@ void IX_IndexHandle::updateToRoot(int v) {
     // 
     if (v == NULL_NODE)
         return;
-    BTNode node_v = loadNode(v);
+    BTNode node_v;
+    loadNode(node_v, v);
     int parent = node_v.getParent();
     while (parent != NULL_NODE && node_v.getDataSize() > 0) {
-        BTNode node_parent = loadNode(parent);
+        BTNode node_parent;
+        loadNode(node_parent, parent);
         int rank = BTNode::getParentRank(node_v, node_parent);
         node_v.getData(0, data_global, rid_global);
         node_parent.setData(rank, data_global, rid_global);
@@ -552,7 +573,8 @@ void IX_IndexHandle::solveOverflow(BTNode& node_v) {
         return;
     }
     int s = (_order + 1) / 2;
-    BTNode node_u = createNode();
+    BTNode node_u; 
+    createNode(node_u);
     bool leaf = node_v.isLeaf();
     node_u.setLeaf(leaf);
     if (leaf) {
@@ -570,7 +592,8 @@ void IX_IndexHandle::solveOverflow(BTNode& node_v) {
     }
     if (!leaf) {
         for (int j = 0; j < _order + 1 - s; j++) {
-            BTNode node_child = loadNode(node_u.getChild(j));
+            BTNode node_child;
+            loadNode(node_child, node_u.getChild(j));
             node_child.setParent(node_u.pageID);
         }
     }
@@ -578,7 +601,7 @@ void IX_IndexHandle::solveOverflow(BTNode& node_v) {
     BTNode node_parent(bufPageManager);
     if (p == NULL_NODE) {
         // 全树高度增加
-        node_parent = createNode();
+        createNode(node_parent);
         node_parent.setLeaf(false);
         p = _root = node_parent.pageID;
         node_v.getData(0, data_global, rid_global);
@@ -586,7 +609,7 @@ void IX_IndexHandle::solveOverflow(BTNode& node_v) {
         node_parent.insertChild(0, node_v.pageID);
         node_v.setParent(p);
     } else {
-        node_parent = loadNode(p);
+        loadNode(node_parent, p);
     }
     int r = BTNode::getParentRank(node_v, node_parent);
     node_u.getData(0, data_global, rid_global);
@@ -599,32 +622,40 @@ void IX_IndexHandle::solveOverflow(BTNode& node_v) {
 }
 void IX_IndexHandle::addLink(const BTNode& node) {
     // 将node的pageID加入空闲链表
-    Debug::print(Debug::BTREE_LINK_DETAIL, "IX_IndexHandle::addLink:%d", node.pageID);
+    // Debug::print(Debug::BTREE_LINK_DETAIL, "IX_IndexHandle::addLink:%d", node.pageID);
     if (node.pageID < headPage.nextFree) {
         // 情况1:pageID在第一个空闲指针前，
         *(node.next_free) = headPage.nextFree;
         *(node.prev_free) = 0;
+        node.markDirty();
         if (headPage.nextFree != headPage.pageNum) {
             // 第一个空闲页[存在]
-            BTNode next_node = loadNode(headPage.nextFree);
+            BTNode next_node;
+            loadNode(next_node, headPage.nextFree);
             *(next_node.prev_free) = node.pageID;
+            next_node.markDirty();
         }
         headPage.nextFree = node.pageID;
     } else { // 情况2:pageID在某个指针后
-        BTNode current = loadNode(headPage.nextFree);
+        BTNode current;
+        loadNode(current, headPage.nextFree);
         int next = *current.next_free;
         while (next < node.pageID) {
-            current = loadNode(next);
+            loadNode(current, next);
             next = *current.next_free;
         }
         // 现在current.pageID < pageID < next
         *current.next_free = node.pageID;
+        current.markDirty();
         *node.prev_free = current.pageID;
         *node.next_free = next;
+        node.markDirty();
         if (next != headPage.pageNum) {
             // 若next页面存在
-            BTNode next_node = loadNode(next);
+            BTNode next_node;
+            loadNode(next_node, next);
             *next_node.prev_free = node.pageID;
+            next_node.markDirty();
         }
     }
 }
@@ -632,7 +663,7 @@ void IX_IndexHandle::removeLink(const BTNode& node) {
     // 将一个空闲页从空闲链表移除，一般都是移除第一项
     // 若node存在，则更新nextFree和node的nextFree
     // 若node不存在，则更新nextFree
-    Debug::print(Debug::BTREE_LINK_DETAIL, "IX_IndexHandle::removeLink:%d", node.pageID);
+    // Debug::print(Debug::BTREE_LINK_DETAIL, "IX_IndexHandle::removeLink:%d", node.pageID);
     if (node.pageID == headPage.nextFree) {
         // 移除第一项
         if (headPage.nextFree == headPage.pageNum) {
@@ -644,8 +675,10 @@ void IX_IndexHandle::removeLink(const BTNode& node) {
             int next = *node.next_free;
             headPage.nextFree = next;
             if (next < headPage.pageNum) {
-                BTNode next_node = loadNode(next);
+                BTNode next_node; 
+                loadNode(next_node, next);
                 *next_node.prev_free = 0;
+                next_node.markDirty();
             }
             return;
         }   
@@ -655,7 +688,8 @@ void IX_IndexHandle::removeLink(const BTNode& node) {
     headPage.nextFree = next;
     assert(*node.prev_free == 0);
     if (next != headPage.pageNum) {
-        BTNode next_node = loadNode(next);
+        BTNode next_node;
+        loadNode(next_node, next);
         *next_node.prev_free = node.pageID;
     }
 }
@@ -665,33 +699,36 @@ void IX_IndexHandle::traverse() {
 void IX_IndexHandle::traverse(int pageID) {
     //按从小到大顺序打印
     printHeadPage();
-    BTNode node = loadNode(pageID);
+    BTNode node;
+    loadNode(node, pageID);
     node.print();
-    if (node.isLeaf()) return;
+
     for (int i = 0; i < node.getChildSize(); i++) {
         int child = node.getChild(i);
         if (child != NULL_NODE) {
-            BTNode chi = loadNode(child);
+            BTNode chi;
+            loadNode(chi, child);
             chi.print();
         }
     }
 }
 void IX_IndexHandle::findFirstValue(void* value0, int& pageID, int& rank) {
     // 原型
-    cout << *(int*)value0 << endl;
+    // 查找小于value0的最大位置
+    // cout << *(int*)value0 << endl;
     char value[MAX_ATTRLENGTH];
     appendNullbit(value, (char*)value0, attrLength);
     // 若找到返回0
     int v = _root;
     while (v != NULL_NODE) {
-        cout << "v " << v << endl;
-        BTNode node_v = loadNode(v);
+        //cout << "v " << v << endl;
+        BTNode node_v;
+        loadNode(node_v, v);
         int len = node_v.getDataSize();
-        cout << "data size " << len << endl;
         if (node_v.isLeaf()) {
             // 只有这里返回
             node_v.getData(0, data_global, rid_global);
-            cout << *(int*)data_global << endl;
+            //cout << *(int*)data_global << endl;
             if (BTNode::comp((char*)value, data_global) <= 0) {
                 pageID = node_v.pageID;
                 rank = -1;
@@ -738,12 +775,13 @@ void IX_IndexHandle::findFirstValue(void* value0, int& pageID, int& rank) {
 int IX_IndexHandle::findLastValue(void* value, int& pageID, int& rank, RID& rid) {
     return 0;
 }
-BTNode IX_IndexHandle::loadFirstLeaf() {
+void IX_IndexHandle::loadFirstLeaf(BTNode &node) {
     if (headPage.right != NULL_NODE) {
-        return loadNode(headPage.right);
+        loadNode(node, headPage.right);
+        return;
     }
     assert(false);
-    return loadNode(_root);
+    loadNode(node, _root);
 }
 int IX_IndexHandle::loadNextNode(BTNode& node) {
     if (*node.right != NULL_NODE) {
@@ -766,6 +804,12 @@ int IX_IndexScan::OpenScan(IX_IndexHandle &indexHandle, CompOp compOp, void *val
     attrLength = indexHandle.attrLength;
     attrType = indexHandle.headPage.getType();
     current_value = new char[attrLength + 1];
+    if (compOp == NO_OP) {
+        this->value = NULL;
+        this->compOp = NO_OP;
+        comparator = NULL;
+        return 0;
+    }
     if (value == NULL) {
         if (compOp == EQ_OP || compOp == NE_OP) {
             cout << "空值遍历索引\n";
@@ -785,12 +829,12 @@ int IX_IndexScan::OpenScan(IX_IndexHandle &indexHandle, CompOp compOp, void *val
 int IX_IndexScan::tryLoadNext(BTNode& node, int& rank, char* data, RID& rid) {
     // rank有可能已经改变
     // 查找直到有大于rank的条目
-    
+    // data是拓展型
     while (node.getNextData(rank, data, rid) != 0) { // 当前结点没有下一条
         int next = indexHandle->loadNextNode(node);
         if (next != NULL_NODE) { // 右结点存在
             rank = -1;
-            node = indexHandle->loadNode(next);
+            indexHandle->loadNode(node, next);
         } else {
             // 到了叶结点的末尾
             return -1;
@@ -799,11 +843,14 @@ int IX_IndexScan::tryLoadNext(BTNode& node, int& rank, char* data, RID& rid) {
     return 0;
 }
 int IX_IndexScan::findNext(RID& rid) {
+    // data_global是拓展型
     // 若非第一次获取，则需要判断是否大于之前获取的值
     // 返回0表示获取成功。需要记录此时的值
     while (tryLoadNext(node_current, rank, data_global, rid_global) == 0) { // 读下一条记录
         bool satisfied;
-        if (value == NULL) {
+        if (compOp == NO_OP) {
+            satisfied = true;   // 认为此时无空值
+        } else if (value == NULL) {
             // 查找空值
             assert(compOp == EQ_OP || compOp == NE_OP);
             if (compOp == EQ_OP) {
@@ -817,7 +864,7 @@ int IX_IndexScan::findNext(RID& rid) {
             // 非空查找
             satisfied = comparator(data_global, value, attrType, attrLength);
         }
-        cout << "查找下一条" << rank << endl;
+        //cout << "查找下一条" << rank << endl;
         if (satisfied) {
             // 满足过滤条件
             if (numScanned == 0) {
@@ -844,7 +891,6 @@ int IX_IndexScan::GetNextEntry(RID &rid) {
     // 为了允许删除，插入操作，不能只记录rank，要记录上次查询的rid
     bool shouldReset = false;
     if (numScanned > 0) {
-        cout << "检查删除\n";
         node_current.getData(rank, data_global, rid_global);
         if (RID::comp(current_RID, rid_global) != 0) {
             // 执行了删除操作，重置指针
@@ -853,7 +899,7 @@ int IX_IndexScan::GetNextEntry(RID &rid) {
     }
     if (numScanned > 0 && !shouldReset) {
         // 没有插入、删除操作
-        cout << "不是第一次，也没有变动\n";
+        //cout << "不是第一次，也没有变动\n";
         return findNext(rid);
     } else if (numScanned == 0) {
         // 第一次扫描
@@ -861,14 +907,14 @@ int IX_IndexScan::GetNextEntry(RID &rid) {
             // 找到最后一个小于value的位置
             int pageID;
             indexHandle->findFirstValue(value, pageID, rank);
-            cout << "初始化" << pageID << "," << rank << endl;
-            node_current = indexHandle->loadNode(pageID);
-            cout << node_current.pageID << "结点条数:" << *node_current.entry_count <<endl;
+            //cout << "初始化" << pageID << "," << rank << endl;
+            indexHandle->loadNode(node_current, pageID);
+            //cout << node_current.pageID << "结点条数:" << *node_current.entry_count <<endl;
             return findNext(rid);
-        } else if (compOp == CompOp::LT_OP || compOp == CompOp::LE_OP) {
+        } else if (compOp == CompOp::LT_OP || compOp == CompOp::LE_OP || compOp == CompOp::NO_OP) {
             // 找到第一个结点
             rank = -1;
-            node_current = indexHandle->loadFirstLeaf();
+            indexHandle->loadFirstLeaf(node_current);
             return findNext(rid);
         } 
     } else if (shouldReset) {
@@ -876,12 +922,12 @@ int IX_IndexScan::GetNextEntry(RID &rid) {
             // 找到最后一个小于value的位置
             int pageID;
             indexHandle->findFirstValue(value, pageID, rank);
-            node_current = indexHandle->loadNode(pageID);
+            indexHandle->loadNode(node_current, pageID);
             return findNext(rid);
         } else if (compOp == CompOp::LT_OP || compOp == CompOp::LE_OP) {
             // 找到第一个结点
             rank = -1;
-            node_current = indexHandle->loadFirstLeaf();
+            indexHandle->loadFirstLeaf(node_current);
             return findNext(rid);
         } 
     }
@@ -891,13 +937,18 @@ int IX_IndexScan::CloseScan() {
     return 0;
 }
 void IX_IndexHandle::addLeafLinkAfter(BTNode& node_v, BTNode& node_after) {
+    // 将node_after插入到node_v后面
     int rightBro = *node_v.right;
     *node_v.right = node_after.pageID;
+    node_v.markDirty();
     *node_after.left = node_v.pageID;
     *node_after.right = rightBro;
+    node_after.markDirty();
     if (rightBro != NULL_NODE) {
-        BTNode right_node = loadNode(rightBro);
+        BTNode right_node;
+        loadNode(right_node, rightBro);
         *right_node.left = node_after.pageID;
+        right_node.markDirty();
     }
 }
 void IX_IndexHandle::removeLeafLink(BTNode& node) {
@@ -907,22 +958,34 @@ void IX_IndexHandle::removeLeafLink(BTNode& node) {
     }
     int leftBro = *node.left, rightBro = *node.right;
     if (leftBro != NULL_NODE) {
-        BTNode left_node = loadNode(leftBro);
+        BTNode left_node;
+        loadNode(left_node, leftBro);
         *left_node.right = rightBro;
+        left_node.markDirty();
     } else {
         headPage.right = rightBro;
     }
     if (rightBro != NULL_NODE) {
-        BTNode right_node = loadNode(rightBro);
+        BTNode right_node;
+        loadNode(right_node, rightBro);
         *right_node.left = leftBro;
+        right_node.markDirty();
     }
 }
 BTNode::~BTNode() {
-    bufPageManager->writeBack(bufIndex);
+    // 不应该写回任何东西 同时可能存在两个结点指向同一地方
+    /*if (inited)
+        cout << "释放结点" << pageID << endl;
+    else 
+        cout << "释放的结点未初始化!\n"; */
 }
 void BTNode::print() const {
-    Debug::debug("当前结点 [pageID:%d,parent:%d,entry_count:%d,prev_free:%d,next_free:%d] %s叶子结点",\
+    printf("当前结点 [pageID:%d,parent:%d,entry_count:%d,prev_free:%d,next_free:%d] %s叶子结点\n",\
         pageID, *parent, *entry_count, *prev_free, *next_free, (isLeaf()) ? "是" : "不是");
+    if (isLeaf()) {
+        cout << "叶子连接" << *left << "<" << pageID << ">" << *right << endl;
+        return;
+    }
     for (int i = 0; i < *entry_count; i++) {
         getData(i, data_global, rid_global);
         Debug::print(Debug::BTREE_PRINT_DATA_DETAIL, "第%d项{RID[%d,%d] childPageID:%d}", i, rid_global.getPage(), rid_global.getSlot(), getChild(i));
@@ -941,6 +1004,7 @@ BTNode::BTNode() {
     values = NULL; rids = NULL; childs = NULL; prev_free = next_free = NULL;
     BTNode::entryLimit = 0; BTNode::attrLength = 0; BTNode::attrType = INVALID;
     pageID = bufIndex = -1;
+    inited = false;
 }
 BTNode::BTNode(BufPageManager* bufPageManager) {
     if (BTNode::bufPageManager == NULL)
@@ -949,6 +1013,7 @@ BTNode::BTNode(BufPageManager* bufPageManager) {
     values = NULL; rids = NULL; childs = NULL; prev_free = next_free = NULL;
     BTNode::entryLimit = 0; BTNode::attrLength = 0; BTNode::attrType = INVALID;
     pageID = bufIndex = -1;
+    inited = false;
 }
 int BTNode::comp(char* v1, char* v2) {
     // 拓展型
@@ -994,6 +1059,7 @@ int BTNode::search(char* data, const RID& rid) {
     assert(data != NULL);
     // 规定 索引保存子树的最小值
     // 若为叶子结点，返回待插入位置[0, count] 或者存在的秩 [0, count)
+    // 查找 v[rank]>=e 即大于等于e的最小的
     // 若为索引结点，返回待插入位置或存在的秩所在的子树的秩 [0, count)
     bool isLeaf = this->isLeaf();
     if (entry_count == NULL || *entry_count == 0) {
@@ -1003,27 +1069,23 @@ int BTNode::search(char* data, const RID& rid) {
     }
     if (isLeaf) {
         int l = 0, r = *entry_count - 1;
-        getData(l, data_global, rid_global);
-        if (BTNode::comp(data, rid, data_global, rid_global) <= 0)
-            return 0;
         getData(r, data_global, rid_global);
+        // cout << "插入整数" << *(int*)data << endl;
+        // cout << "当前" << r << "是" << *(int*)data_global << endl;
         if (BTNode::comp(data, rid, data_global, rid_global) > 0)
             return r + 1;
-        while (l < r - 1) {
+        while (l < r) {
             int m = (l + r) >> 1;
             getData(m, data_global, rid_global);
-            if (BTNode::comp(data, rid, data_global, rid_global) < 0) {
-                r = m - 1;
+            if (BTNode::comp(data, rid, data_global, rid_global) <= 0) {
+                r = m;
             } else {
-                l = m;
+                l = m + 1;
             }
         }
-        if (l == r) return l;
-        getData(r, data_global, rid_global);
-        if (BTNode::comp(data, rid, data_global, rid_global) < 0) {
-            return l;
-        }
-        return r;
+        // cout << l << endl;
+        assert(l == r);
+        return l;
     } else {
         // 索引
         if (*entry_count <= 1)
@@ -1088,7 +1150,6 @@ void BTNode::removeData(int rank) {
     for (int i = rank; i < *entry_count - 1; i++) {
         rids[i].copy(rids[i + 1]);
     }
-    cout << "改变:removeData\n";
     *entry_count-=1;
     markDirty();
 }
@@ -1096,11 +1157,6 @@ void BTNode::getData(int rank, char* data, RID& rid) const{
     // 拓展型
     if (rank < 0 || rank >= *entry_count) {
         Debug::error("getData range exceeds %d, %d", rank, *entry_count);
-        cout << pageID << endl;
-        print();
-        while (1) {
-
-        }
         return;
     }
     int actualLen = attrLength + 1;
@@ -1115,7 +1171,7 @@ void BTNode::insertData(int rank, char* data, const RID& rid) {
         Debug::error("insertData rank [%d, %d]", rank, *entry_count);
         return;
     }
-    cout << "插入数据" << *(int*)data << endl;
+    // cout << "插入数据" << *(int*)data << endl;
     assert(data != NULL);
     markDirty();
     int actualLen = attrLength + 1;
@@ -1129,7 +1185,6 @@ void BTNode::insertData(int rank, char* data, const RID& rid) {
     memcpy(value, data, actualLen);
     rids[rank].copy(rid);
     *entry_count+=1;
-    cout << "改变:insertData\n";
 }
 void BTNode::removeData(int rank, char* data, RID& rid) {
     // 拓展型
@@ -1150,7 +1205,6 @@ void BTNode::removeData(int rank, char* data, RID& rid) {
         rids[i].copy(rids[i + 1]);
     }
     *entry_count-=1;
-    cout << "改变:removeData\n";
 }
 int BTNode::removeChild(int rank) {
     if (rank < 0 || rank >= *child_count) {
@@ -1236,7 +1290,6 @@ void BTNode::withEmptyPage(BufType b, Head_Page headPage, int pID, int index) {
     *right = NULL_NODE;
     *prev_free = NULL_NODE;
     *next_free = NULL_NODE;
-    cout << "改变:withEmpty\n";
     *entry_count = 0;
     *child_count = 0;
     *is_leaf = 0;
@@ -1260,4 +1313,5 @@ void BTNode::withContentPage(BufType b, Head_Page headPage, int pID, int index) 
     char* child_pos = rid_pos + (BTNode::entryLimit + 1) * sizeof(RID);
     rids = (RID*)(rid_pos);
     childs = (int*)child_pos;
+    inited = true;
 }

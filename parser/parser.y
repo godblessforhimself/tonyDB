@@ -1,5 +1,6 @@
 %{
     #include "parser.h"
+    using namespace std;
     extern "C" {
         void yyerror(char *);
         int yyparse(void);
@@ -7,11 +8,17 @@
         extern int yylex(void);
     }
     int exit_flag = 0;
+    int attrcount = 0, indexcount = 0, insertcount = 0;
+    RelationEntry tbentry;
+    AttributeEntry *attrentry = NULL;
+    RecordHandle *fileHandle = NULL;
+    IX_IndexHandle *indexHandles = NULL;
 #ifndef yyrestart
     void yyrestart(FILE*);
 #endif
 %}
-%token <ival> TOKEN_CREATE
+%token <ival> TOKEN_EOF
+        TOKEN_CREATE
         TOKEN_DATABASE
         TOKEN_DATABASES
         TOKEN_DROP
@@ -52,9 +59,10 @@
 
 %token <sval> TOKEN_STRING_IDENTIFIER SYS_COMMAND VALUE_STRING
 %token <ival> VALUE_INT
-%type <sval> tbName dbName colName
-%type <pnode> type field fieldList columnList value valueList valueLists tableList whereClause setClause selector condition col expr
-%type <cval> op
+%token <fval> VALUE_FLOAT
+%type <sval> tbName dbName colName insert
+%type <pnode> type field fieldList columnList value valueList tableList whereClause setClause selector condition col expr colList
+%type <cval>  op
 %%
 program: stmt
         {
@@ -71,6 +79,11 @@ program: stmt
     |   TOKEN_EXIT
         {
             exit_flag = 1;
+            YYACCEPT;
+        }
+    |   TOKEN_EOF
+        {
+            //exit_flag = 1;
             YYACCEPT;
         }
     ;
@@ -134,6 +147,8 @@ tbStmt: TOKEN_DROP TOKEN_TABLE tbName
             // $5->print(cout);
             if (gl_systemManager->createTable($3, $5) != 0) {
                 printf("create table error!\n");
+            } else {
+                cout << "创建表" << $3 << "成功\n";
             }
         }
     |   TOKEN_DESC tbName
@@ -143,22 +158,17 @@ tbStmt: TOKEN_DROP TOKEN_TABLE tbName
                 printf("print %s failed!\n", $2);
             }
         }
-    |   TOKEN_INSERT TOKEN_INTO tbName TOKEN_VALUES valueLists
+    |   insert
         {
-            // 向表中插入数据 insert into tbName values valueLists
-            cout << "start insert!\n";
-            parser_node *current = $5;
-            while (current != NULL) {
-                parser_node *&value = current->u.ValueLists.value;
-                if (gl_qlManager->Insert($3, value) != 0) {
-                    cout << "insert into " << $3 << " ";
-                    value->printValueList(cout);
-                    cout << " failed!\n";
-                } else {
-                    cout << "insert success!\n";
-                }
-                current = current->u.ValueLists.next;
-            }
+            // 释放
+            if (attrentry != NULL) 
+                delete[] attrentry;
+            if (fileHandle != NULL)
+                delete fileHandle;
+            if (indexHandles != NULL)
+                delete[] indexHandles;
+            cout << "插入" << insertcount << "条记录\n";
+            cout << "总共用时" << tickTock.tock() * 1000 << "ms\n";
         }
     |   TOKEN_DELETE TOKEN_FROM tbName TOKEN_WHERE whereClause
         {
@@ -175,14 +185,114 @@ tbStmt: TOKEN_DROP TOKEN_TABLE tbName
                 cout << "update error!\n";
                 // todo: 错误信息
             }
+            cout << "更新完成\n";
         }
     |   TOKEN_SELECT selector TOKEN_FROM tableList TOKEN_WHERE whereClause
         {
             // 选择表中数据 select [] from [] where []
+            tickTock.tick();
             if (gl_qlManager->Select($2, $4, $6) != 0) {
                 cout << "select error!\n";
                 // todo: 错误信息
             }
+            double second = tickTock.tock();
+            cout << "select使用" << second * 1000 << "ms\n";
+        }
+    ;
+insert: TOKEN_INSERT TOKEN_INTO tbName TOKEN_VALUES '(' valueList ')'
+        {
+            insertcount=0;
+            // 创建
+            RecordScan tbscan, attrscan; Record record;
+            int openScan(RecordHandle &recordHandle, constSpace::AttrType attrType, int attrLength, int attrOffset, constSpace::CompOp compOp, void *value);
+            if (tbscan.openScan(gl_systemManager->relationHandle, STRING, MAX_RELNAME_LENGTH, OFFSETOF(RelationEntry, relName), EQ_OP, $3) != 0) {
+                cout << "打开关系表" << $3 << "失败\n";
+                return -1;
+            }
+            if (tbscan.getNextRec(record) != 0) {
+                cout << "打开关系表" << $3 << "失败\n";
+                return -1;
+            }
+            tbentry = *(RelationEntry*)record.getData();
+            attrcount = tbentry.attrCount;
+            attrentry = new AttributeEntry[attrcount];
+            if (attrscan.openScan(gl_systemManager->attrHandle, STRING, MAX_ATTRNAME_LENGTH, OFFSETOF(AttributeEntry, relName), EQ_OP, $3) != 0) {
+                cout << "打开属性表失败\n";
+                return -1; 
+            }
+            indexcount = 0;
+            int primaryKC = 0; // 主键数目
+            for (int i = 0; i < attrcount; ++i) {
+                if (attrscan.getNextRec(record) != 0) {
+                    cout << "缺少属性\n";
+                    return -1;
+                }
+                attrentry[i] = *(AttributeEntry*)record.getData();
+                if (attrentry[i].indexNo >= 0) {
+                    indexcount++;
+                }
+                if (attrentry[i].isPrimarykey) {
+                    primaryKC++;
+                    if (attrentry[i].attrType != AttrType::INT)
+                        primaryKC++;
+                }
+            }
+            if (primaryKC == 1 && usePKBufferOptimize) {   // 设置全局优化标志
+                usePKOptimize = true;
+            } else {
+                usePKOptimize = false;
+            }
+            int BMsize = (attrcount >> 3) + 1;
+            int entrysize = tbentry.tupleLength;
+            fileHandle = new RecordHandle();
+            if (gl_recordManager->openFile($3, *fileHandle) != 0) {
+                if (gl_recordManager->createFile($3, BMsize + entrysize) == false) {
+                    printf("create %s failed!\n", $3);
+                    return -1;
+                }
+                if (gl_recordManager->openFile($3, *fileHandle) != 0) {
+                    printf("open %s failed.\n", $3);
+                    return -1;
+                }
+                cout << "创建文件" << $3 << "成功\n";
+            }
+            indexHandles = new IX_IndexHandle[indexcount];
+            int nowposofhandle = 0;
+            for (int i = 0; i < attrcount; ++i) {
+                if (attrentry[i].indexNo >= 0) {
+                    if (gl_indexingManager->OpenIndex($3, attrentry[i].indexNo, indexHandles[nowposofhandle]) != 0) {
+                        cout << "打开索引" << attrentry[i].indexNo << "失败\n";
+                        return -1;
+                    }
+                }
+            }
+            // 准备好了
+            $$ = $3;
+            if (usePKOptimize) {
+                PKBuffer.resetPKBuffer();
+            }
+            if (gl_qlManager->Insert($3, $6, &tbentry, attrentry, attrcount, *fileHandle, indexHandles, indexcount) != 0) {
+                cout << "插入表" << $3 << "失败\n";
+                // return -1;
+            }
+            insertcount=1;
+            tickTock.tick();
+        }
+    |   insert ',' '(' valueList ')'
+        {   
+            // 清空内存
+            $$ = $1;
+            if (gl_qlManager->Insert($1, $4, &tbentry, attrentry, attrcount, *fileHandle, indexHandles, indexcount) != 0) {
+                $4->printValueList(cout);
+                cout << "插入表" << $1 << "失败\n";
+                // return -1;
+            }
+            insertcount++;
+            if (insertcount % 1000 == 0) {
+                double second = tickTock.tock();
+                cout << "插入" << insertcount << "条,花去时间" << second * 1000 << "ms\n";
+            }
+            reset_ptr($1); // 保存tbName 清空其他的
         }
     ;
 idxStmt: TOKEN_CREATE TOKEN_INDEX tbName '(' colName ')'
@@ -247,11 +357,24 @@ selector:
             node->set_selector(NULL);
             $$ = node;
         }
-    |   columnList
+    |   colList
         {
             parser_node *node = allocNode();
             node->set_selector($1);
             $$ = node;
+        }
+    ;
+colList:col
+        {
+            parser_node *node = allocNode();
+            node->init_list($1);
+            $$ = node;
+        }
+    |   colList ',' col
+        {
+            parser_node *node = allocNode();
+            $1->append_list($3, node);
+            $$ = $1;
         }
     ;
 tableList:  
@@ -298,13 +421,13 @@ type:
     |   TOKEN_DATE
         {
             parser_node *node = allocNode();
-            node->set_attr_type(DATE, 0);
+            node->set_attr_type(STRING, 10);
             $$ = node;
         }
     |   TOKEN_FLOAT
         {
             parser_node *node = allocNode();
-            node->set_attr_type(FLOAT, 0);
+            node->set_attr_type(FLOAT, 4);
             $$ = node;
         }
     ;
@@ -315,6 +438,12 @@ value:  VALUE_INT
             $$ = node;
         }
     |   VALUE_STRING
+        {
+            parser_node *node = allocNode();
+            node->set_value($1);
+            $$ = node;
+        }
+    |   VALUE_FLOAT
         {
             parser_node *node = allocNode();
             node->set_value($1);
@@ -342,29 +471,15 @@ valueList:
         }
     ;
 
-valueLists: 
-        '(' valueList ')'
-        {
-            parser_node *node = allocNode();
-            node->init_value_lists($2);
-            $$ = node;
-        }
-    |   valueLists ',' '(' valueList ')'
-        {
-            parser_node *node = allocNode();
-            $1->append_value_list($4, node);
-            $$ = $1;
-        }
-    ;
 setClause: 
-        colName '=' value
+        colName OP_EQ value
         {
             parser_node *single = allocNode(), *list = allocNode();
             single->single_set($1, $3);
             list->init_list(single);
             $$ = list;
         }
-    |   setClause ',' colName '=' value
+    |   setClause ',' colName OP_EQ value
         {
             parser_node *single = allocNode(), *list = allocNode();
             single->single_set($3, $5);
@@ -466,10 +581,10 @@ colName: TOKEN_STRING_IDENTIFIER
 %%
 
 void yyerror(char *s) {
-    cout << s << endl;
+   // cout << "错误:" << s << endl;
 }
 int yywrap(void) {
-   return 1;
+   return 0;
 }
 void runParser() {
     yydebug = 0;
@@ -478,7 +593,8 @@ void runParser() {
         yyparse();
         if (exit_flag) 
             break;
-        yyrestart(stdin);
+        //yyrestart(stdin);
     }
+    cout << "\n";
     return;
 }

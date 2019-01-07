@@ -8,6 +8,14 @@ int scanPtr = 0;
 void reset_ptr() {
     scanPtr = 0;
 }
+void reset_ptr(char *&str) {
+    //
+    int len = strlen(str);
+    strncpy(scanPool, str, len + 1);
+    scanPool[len] = 0;
+    str = scanPool;
+    scanPtr = len + 1;
+}
 void *alloc_len(int len) {
     char *s;
     if(scanPtr + len > CHAR_POOL_SIZE){
@@ -28,11 +36,9 @@ AttrType *allocAttrType(AttrType type) {
 }
 char *mk_string(char *src, int len) {
     char *dst;
-    if((dst = (char*)alloc_len(len + 1)) == NULL){
-        printf("out of string space\n");
-        exit(1);
-    }
+    dst = (char*)alloc_len(len + 1);
     strncpy(dst, src, len + 1);
+    dst[len] = 0;
     return dst;
 }
 int get_id(char *s) {
@@ -91,7 +97,7 @@ int get_id(char *s) {
         return yylval.ival = TOKEN_IS;
     } else if (match("int")) {
         return yylval.ival = TOKEN_INT;
-    } else if (match("varchar")) {
+    } else if (match("char")) {
         return yylval.ival = TOKEN_VARCHAR;
     } else if (match("desc")) {
         return yylval.ival = TOKEN_DESC;

@@ -242,6 +242,9 @@ int SM_Manager::createTable(const char *tbName, parser_node *fieldList) {
                         break;
                 }
                 break;
+            default:
+                cout << "createTable iter类型错误\n";
+                return -1;
         }
         current = current->u.List.next;
     }
@@ -310,6 +313,7 @@ int SM_Manager::createIndex(const char *table, const char *attrName) {
                 return -1;
             }
             attrinfo->indexNo = count;
+            cout << "更新属性" << attrinfo->attrName << "的索引" << attrinfo->indexNo << endl;
             attrHandle.updateRec(record);
             IX_IndexHandle handle;
             if (indexingManager->OpenIndex(table, count, handle) != 0) {
@@ -326,8 +330,10 @@ int SM_Manager::createIndex(const char *table, const char *attrName) {
                 cout << "打不开scan\n";
                 return -1;
             }
-            Record rc;
+            cout << "打开了文件" << table << endl;
+            Record rc; int indexnumber = 0;
             while (fileScan.getNextRec(rc) == 0) {
+                indexnumber++;
                 char *data = rc.getData();
                 char *bm = data + tupleLength;
                 int isNull = getBitmap(attrindex, (void*)bm);
@@ -341,6 +347,8 @@ int SM_Manager::createIndex(const char *table, const char *attrName) {
                     return -1;
                 }
             }
+            //handle.printHeadPage();
+            cout << "共插入索引" << indexnumber << endl;
             relationHandle.forceDisk();
             attrHandle.forceDisk();
             return 0;

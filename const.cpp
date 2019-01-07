@@ -28,11 +28,12 @@ bool constSpace::twoTypeMatch(AttrType a, ValueType b) {
 		return true;
 	if (a == FLOAT && b == v_float)
 		return true;
-	if (a == DATE && b == v_date)
+	if (a == DATE && b == v_string)
 		return true;
 	return false;
 }
 bool constSpace::equal(void* value1, void* value2, constSpace::AttrType attrtype, int attrLength) {
+	assert(value1 != NULL && value2 != NULL);
 	switch (attrtype) {
 	    case constSpace::FLOAT: return (*(float*)value1 == *(float*)value2);
 	    case constSpace::INT: return (*(int*)value1 == *(int*)value2) ;
@@ -40,6 +41,7 @@ bool constSpace::equal(void* value1, void* value2, constSpace::AttrType attrtype
   	}
 }
 bool constSpace::less_than(void* value1, void* value2, constSpace::AttrType attrtype, int attrLength) {
+	assert(value1 != NULL && value2 != NULL);
   	switch (attrtype) {
     	case constSpace::FLOAT: return (*(float*)value1 < *(float*)value2);
     	case constSpace::INT: return (*(int*)value1 < *(int*)value2);
@@ -47,6 +49,7 @@ bool constSpace::less_than(void* value1, void* value2, constSpace::AttrType attr
   }
 }
 bool constSpace::greater_than(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength){
+	assert(value1 != NULL && value2 != NULL);
  	switch (attrtype) {
    		case constSpace::FLOAT: return (*(float *)value1 > *(float*)value2);
     	case constSpace::INT: return (*(int *)value1 > *(int *)value2) ;
@@ -54,6 +57,7 @@ bool constSpace::greater_than(void * value1, void * value2, constSpace::AttrType
   }
 }
 bool constSpace::less_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength){
+	assert(value1 != NULL && value2 != NULL);
   	switch(attrtype){
     	case constSpace::FLOAT: return (*(float *)value1 <= *(float*)value2);
     	case constSpace::INT: return (*(int *)value1 <= *(int *)value2) ;
@@ -61,6 +65,7 @@ bool constSpace::less_than_or_eq_to(void * value1, void * value2, constSpace::At
   }
 }
 bool constSpace::greater_than_or_eq_to(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength){
+	assert(value1 != NULL && value2 != NULL);
   	switch(attrtype){
     	case constSpace::FLOAT: return (*(float *)value1 >= *(float*)value2);
     	case constSpace::INT: return (*(int *)value1 >= *(int *)value2) ;
@@ -68,7 +73,8 @@ bool constSpace::greater_than_or_eq_to(void * value1, void * value2, constSpace:
   }
 }
 bool constSpace::not_equal(void * value1, void * value2, constSpace::AttrType attrtype, int attrLength){
-  	switch(attrtype){
+  	assert(value1 != NULL && value2 != NULL);
+	switch(attrtype){
     	case constSpace::FLOAT: return (*(float *)value1 != *(float*)value2);
     	case constSpace::INT: return (*(int *)value1 != *(int *)value2) ;
     	default: return (strncmp((char *) value1, (char *) value2, attrLength) != 0);
@@ -99,9 +105,7 @@ int constSpace::getattrlength(AttrType a) {
 		case FLOAT:
 			return 4;
 		case DATE:
-			return 4;
 		case STRING:
-			return 0;
 		case INVALID:
 			return 0;
 	}
@@ -123,7 +127,7 @@ void Printer::printAttribute(ostream &c, constSpace::AttributeEntry* entry) {
 }
 void constSpace::transAttrType(AttrType type, char* dst) {
 	switch (type) {
-		case INT:
+		case AttrType::INT:
 			strcpy(dst, attr_int);
 			return;
 		case FLOAT:
@@ -236,6 +240,11 @@ void parser_node::set_value(int a) {
 	u.Value.vtype = v_int;
 	u.Value.value.integer = a;
 }
+void parser_node::set_value(float a) {
+	nType = N_VALUE;
+	u.Value.vtype = v_float;
+	u.Value.value.fnumber = a;
+}
 void parser_node::set_value(char* a) {
 	nType = N_VALUE;
 	u.Value.vtype = v_string;
@@ -277,22 +286,6 @@ void parser_node::append_list(parser_node *value, parser_node *newptr) {
 		tail = newptr;
 	}
 }
-void parser_node::init_value_lists(parser_node *value) {
-	nType = N_VALUE_LISTS;
-	u.ValueLists.value = value;
-	u.ValueLists.next = u.ValueLists.tail = NULL;
-}
-void parser_node::append_value_lists(parser_node *value, parser_node *newptr) {
-	newptr->u.ValueLists.value = value;
-	newptr->u.ValueLists.next = newptr->u.ValueLists.tail = NULL;
-	if (u.ValueLists.next == NULL) {
-		u.ValueLists.next = u.ValueLists.tail = newptr;
-	} else {
-		parser_node *&tail = u.ValueLists.tail;
-		tail->u.ValueLists.next = newptr;
-		tail = newptr;
-	}
-}
 void parser_node::printValue(ostream &o) {
 	assert(nType == N_VALUE);
 	switch (u.Value.vtype) {
@@ -304,6 +297,9 @@ void parser_node::printValue(ostream &o) {
 			break;
 		case v_int:
 			o << u.Value.value.integer;
+			break;
+		case v_float:
+			o << u.Value.value.fnumber;
 			break;
 	}
 }
@@ -335,3 +331,49 @@ int getBitmap(int position, void* src) {
 	char that = *((char*)src + bigpos);
 	return (that & (1 << offset));
 }
+void TickTock::tick() {
+	// 记录当前时间
+	begin = clock();
+}
+double TickTock::tock() {
+	// 返回上次tick\tock的秒数
+	return (double)(clock() - begin) / CLOCKS_PER_SEC;
+}
+void PrimaryKeyBuffer::resetPKBuffer() {
+	stackpos = 0;
+}
+PrimaryKeyBuffer::PrimaryKeyBuffer() {
+	stackpos = 0;
+}
+int PrimaryKeyBuffer::getPKBufferState() {
+	// 当前状态: 0 正常; -1 未初始化; 1溢出
+	if (stackpos == 0) {
+		return -1;
+	}
+	if (stackpos == -1)
+		return 1;
+	return 0;
+}
+void PrimaryKeyBuffer::append(int x) {
+	if (stackpos >= PKSize) {
+		stackpos = -1;
+		return;
+	}
+	keys[stackpos] = x;
+	stackpos++;
+}
+int PrimaryKeyBuffer::checkPKDuplicate(int value) {
+	// 0无重复 -1重复
+	assert(stackpos != -1);
+	if (stackpos == 0) {
+		return 0;
+	}
+	for (int i = 0; i < stackpos; ++i) {
+		if (value == keys[i])
+			return -1;
+	}
+	return 0;
+}
+TickTock tickTock;
+PrimaryKeyBuffer PKBuffer;
+bool usePKOptimize;

@@ -5,9 +5,11 @@
 #include <string.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <sys/time.h>
 #include "filesystem/utils/pagedef.h"
 #include "filesystem/fileio/FileManager.h"
 #include "filesystem/bufmanager/BufPageManager.h"
+#define PKSize ((int)(1e7))
 #define PAGESIZE (8000)
 #define NULL_NODE (0)
 #define MAX_RELNAME_LENGTH (32)
@@ -15,12 +17,16 @@
 #define MAX_FILENAME_LENGTH (256)
 #define MAX_ATTRLENGTH (8096)
 #define OFFSETOF(s,m) (size_t) &(((s*)0)->m)
+#define checkPrimaryKey (true)
+#define checkForeignKey (false)
+#define usePKBufferOptimize (true)
 #define CopyANDPrint(x) printf("%s: ", x);\
 va_list args;\
 va_start(args, format);\
 vprintf(format, args);\
 va_end(args);\
 printf("\n")
+unsigned long timediff(timeval start, timeval end);
 namespace constSpace {
 	const char attributeCatalogName[] = "attrcat";
 	const char relationCatalogName[] = "relcat";
@@ -85,7 +91,6 @@ namespace constSpace {
 		N_STRING_LIST,
 		N_VALUE,
 		N_VALUE_LIST,
-		N_VALUE_LISTS,
 		N_COL_OR_VALUE,
 		N_COL,
 		N_CONDITION,
@@ -104,9 +109,8 @@ namespace constSpace {
 	enum ValueType {
 		v_null,
 		v_int,
-		v_string,
-		v_float,
-		v_date
+		v_string, // 对应varchar date
+		v_float
 	};
 	struct parser_node {
 		NodeType nType;
@@ -156,14 +160,13 @@ namespace constSpace {
 				union {
 					int integer;
 					char *string;
+					char *date;
+					float fnumber;
 				} value;
 			} Value;
 			struct {
 				parser_node *value, *next, *tail;
 			} ValueList;
-			struct {
-				parser_node *value, *next, *tail;
-			} ValueLists;
 			struct {
 				char *tbName;
 				char *colName;
@@ -191,6 +194,7 @@ namespace constSpace {
 		void single_set(char *, parser_node *);
 		void set_value();
 		void set_value(int);
+		void set_value(float);
 		void set_value(char*);
 		void set_col(char *tb, char *col);
 		void col_or_value(parser_node *c, parser_node *v);
@@ -201,8 +205,6 @@ namespace constSpace {
 		void append_list(parser_node *value, parser_node *newpoint);
 		void init_value_list(parser_node*);
 		void append_value_list(parser_node*, parser_node*);
-		void init_value_lists(parser_node*);
-		void append_value_lists(parser_node*, parser_node*);
 		void set_attr_type(AttrType, int);
 		void set_field_normal(char*, parser_node*);
 		void set_field_notnull(char*, parser_node*);
@@ -215,6 +217,23 @@ namespace constSpace {
 	};
 	bool twoTypeMatch(AttrType, ValueType);
 }
+struct PrimaryKeyBuffer { // 用于主键重复检查的加速
+	int keys[PKSize];
+	int stackpos;		// 初始指向0; 随时指向下次插入位置
+	void resetPKBuffer();	// 将stackpos置为0
+	PrimaryKeyBuffer();		// 将stackpos置为0
+	int getPKBufferState();	// 当前状态: 0 正常; -1 未初始化; 1溢出
+	void append(int x);		// 添加一项
+	int checkPKDuplicate(int value); // 0无重复 -1重复 assert(stackpos != -1)
+};
+extern bool usePKOptimize;
+extern PrimaryKeyBuffer PKBuffer;
+struct TickTock{ // 滴答
+	clock_t begin;
+	void tick();
+	double tock();
+};
+extern TickTock tickTock;
 void setBitmap(int, void*, int);
 int getBitmap(int, void*);
 class Printer {
@@ -299,11 +318,11 @@ private:
 	int recordSize;
 };
 class Debug {
-	static const int DEBUG = 0;
+	static const int DEBUG = 5;
 	static const int INFO = 3;
-	static const int PROD = 5;
-	static const int ERROR = -1;
-	static const int level = DEBUG;
+	static const int PROD = 1;
+	static const int ERROR = 7;
+	static const int level = PROD;
 public:
 	static const int BTREE_REMOVE = 0;
 	static const int BTREE_INSERT = BTREE_REMOVE + 1;

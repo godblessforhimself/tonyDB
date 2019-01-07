@@ -46,6 +46,7 @@ bool RecordManager::createFile(const char* filename, int recordSize) {
 		Debug::debug("RecordManager::createFile closeFile failed!");
 	}
 	Debug::debug("RecordManager::createFile %s success!\n", filename);
+	cout << "创建文件" << filename << "成功,记录大小" << recordSize << endl;
 	return true;
 }
 bool RecordManager::destroyFile(const char* filename) {
@@ -59,7 +60,7 @@ bool RecordManager::destroyFile(const char* filename) {
 int RecordManager::openFile(const char* filename, RecordHandle& recordHandle) {
 	int fileID;
 	if (!fileManager->openFile(filename, fileID)) {
-		printf("RecordManager::openFile failed to openFile!\n");
+		cout << "RecordManager::openFile打开文件" << filename << "失败\n";
 		return -1;
 	}
 	int index;
@@ -70,7 +71,7 @@ int RecordManager::openFile(const char* filename, RecordHandle& recordHandle) {
 	}
 	recordHandle.setManager(this);
 	recordHandle.setIndex(index);
-	printf("RecordManager::openFile %s success!\n", filename);
+	//printf("RecordManager::openFile %s success!\n", filename);
 	return 0;
 }
 bool RecordManager::closeFile(RecordHandle& recordHandle) {
@@ -114,10 +115,10 @@ int RecordHandle::getRec(const RID &rid, Record& record) {
 		return -1;
 	}
 	bufPageManager->access(index);
-	char* data = new char[recordSize];
-	const char* recordPosition = getRecordPosition(b, this->fileHeader.recordStart, slot, recordSize);
-	memcpy(data, recordPosition, recordSize);
-	record.set(rid, data, recordSize);	
+	char *recordPosition = getRecordPosition(b, this->fileHeader.recordStart, slot, recordSize);
+	record.set(rid, recordPosition, recordSize);
+	// cout << "最后一字节" << (unsigned int)recordPosition[recordSize - 1] << endl;
+	// cout << "getRec里的size=" << recordSize << endl;
 	return 0;	
 }
 int RecordHandle::insertRec(const char *data, RID& rid) {

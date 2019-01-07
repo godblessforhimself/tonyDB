@@ -1,10 +1,18 @@
 # database class project , by tony 2015011284
 
 
-## todo
-* 属性
-* 为空，rm每项增加一个isNull的bool
-* 修改rm和ix的操作
+## 实现了
+* 时间统计
+* 进行连接的优化
+* 外键约束
+* 支持数据类型
+    * int
+    * float
+    * string
+    * date (string)
+* 支持主键
+* 非空
+* 索引
 
 ## 记录管理模块
 

@@ -6,6 +6,7 @@
 using namespace constSpace;
 union yytypeUnion{
     int ival;
+    float fval;
     char* sval;
     parser_node* pnode;
     CompOp cval;
@@ -19,5 +20,6 @@ AttrType *allocAttrType(AttrType type);
 char *mk_string(char *src, int len);
 int get_id(char *s);
 void reset_ptr();
+void reset_ptr(char *&str);
 // 缓冲区结束
 #endif
