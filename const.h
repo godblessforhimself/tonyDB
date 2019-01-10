@@ -17,9 +17,9 @@
 #define MAX_FILENAME_LENGTH (256)
 #define MAX_ATTRLENGTH (8096)
 #define OFFSETOF(s,m) (size_t) &(((s*)0)->m)
-#define checkPrimaryKey (true)
+#define checkPrimaryKey (false)
 #define checkForeignKey (false)
-#define usePKBufferOptimize (true)
+#define usePKBufferOptimize (false)
 #define CopyANDPrint(x) printf("%s: ", x);\
 va_list args;\
 va_start(args, format);\

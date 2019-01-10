@@ -291,6 +291,9 @@ int ConditionInfo::construct(parser_node *n_cond, char *tbNames[], int tablecoun
                     case v_string:
                         setNormal(-1, temp->u.Value.value.string);
                         break;
+                    case v_float:
+                        setNormal(-1, &temp->u.Value.value.fnumber);
+                        break;
                     default:
                         break;
                 }
@@ -678,11 +681,13 @@ ConditionInfo *findCondWithIndex(ConditionInfo *conditions, int count, Attribute
         return indexnull;
     }
 }
-void constructCondition(ConditionInfo *array, int count, parser_node *whereClause, char *tbNames[], int tablecount) {
+int constructCondition(ConditionInfo *array, int count, parser_node *whereClause, char *tbNames[], int tablecount) {
     parser_node *current = whereClause;
     int pos = 0;
     while (current != NULL) {
-        array[pos++].construct(current->u.List.value, tbNames, tablecount);
+        if (array[pos++].construct(current->u.List.value, tbNames, tablecount) != 0) {
+            return -1;
+        }
         current = current->u.List.next;
     }
 }
@@ -995,7 +1000,10 @@ int QL_Manager::Select(parser_node *selector, parser_node *tables, parser_node *
     }
     Record records[tablecount];
     ConditionInfo conditions[conditioncount];
-    constructCondition(conditions, conditioncount, whereClause, tbNames, tablecount);
+    if (constructCondition(conditions, conditioncount, whereClause, tbNames, tablecount) != 0) {
+        cout << "语法错误\n";
+        return -1;
+    }
     //
     bool selectAll = false;
     int selectNum = getSelectorNum(selector);
